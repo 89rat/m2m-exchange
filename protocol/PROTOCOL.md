@@ -3,6 +3,10 @@
 Normative specification for the commerce layer of m2m-exchange. The key words
 MUST, MUST NOT, SHOULD, and MAY are to be interpreted as in RFC 2119.
 
+Extensions: **M2M/1.1** (rail adapters, fiat schemes, prepaid credits, trust
+tiers) lives in [M2M-1.1-rails.md](./M2M-1.1-rails.md) with schemas under
+`schemas/v1.1/`. v1.1 is additive; everything below remains valid.
+
 ## 1. Scope and layering
 
 M2M/1 defines how autonomous buyer and seller agents discover services,

@@ -204,4 +204,54 @@ describe("m2m-gateway", () => {
     expect(body.sellerId).toBe("platform");
     expect(body.fee_bps).toBe(200);
   });
+
+  // ---- Prepaid credits ledger (M2M/1.1 §6) ----
+
+  it("account lifecycle: register -> balance 0 -> derived from entries", async () => {
+    const reg = await SELF.fetch("http://example.com/v1/accounts", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ wallet: "0xAbCd000000000000000000000000000000000001" }),
+    });
+    expect(reg.status).toBe(201);
+    const acct = (await reg.json()) as { accountId: string; apiKey: string };
+    expect(acct.apiKey).toMatch(/^m2m_/);
+
+    const bal = await SELF.fetch("http://example.com/v1/accounts/0xabcd000000000000000000000000000000000001");
+    const b = (await bal.json()) as { balance_usd6: string };
+    expect(b.balance_usd6).toBe("0");
+
+    // Direct ledger insert (simulating a settled top-up), then derived balance + verify
+    await env.REGISTRY.prepare(
+      `INSERT INTO ledger_entries (ts, account, kind, usd6, reason) VALUES (?1,(SELECT id FROM accounts WHERE wallet='0xabcd000000000000000000000000000000000001'),'credit','5000000','topup:test')`,
+    ).bind(Date.now()).run();
+    const bal2 = await SELF.fetch("http://example.com/v1/accounts/0xabcd000000000000000000000000000000000001");
+    const b2 = (await bal2.json()) as { balance_usd6: string };
+    expect(b2.balance_usd6).toBe("5000000"); // $5.00
+
+    const verify = await SELF.fetch("http://example.com/v1/ledger/verify");
+    const v = (await verify.json()) as { ok: boolean; overdrafts: string[] };
+    expect(v.ok).toBe(true);
+  });
+
+  it("insufficient credits returns 402 INSUFFICIENT_CREDITS with topup hint", async () => {
+    const reg = await SELF.fetch("http://example.com/v1/accounts", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ wallet: "0xAbCd000000000000000000000000000000000002" }),
+    });
+    const acct = (await reg.json()) as { apiKey: string };
+    const res = await SELF.fetch("http://example.com/api/weather", {
+      headers: { authorization: `Bearer ${acct.apiKey}` },
+    });
+    expect(res.status).toBe(402);
+    const body = (await res.json()) as { error: { code: string }; balance_usd6: string };
+    expect(body.error.code).toBe("INSUFFICIENT_CREDITS");
+    expect(body.balance_usd6).toBe("0");
+  });
+
+  it("topup SKU returns 402 when unpaid (x402 paywalled)", async () => {
+    const res = await SELF.fetch("http://example.com/v1/accounts/topup/usd5");
+    expect(res.status).toBe(402);
+    const body = (await res.json()) as { accepts: { maxAmountRequired: string }[] };
+    expect(body.accepts[0]!.maxAmountRequired).toBe("5000000"); // $5
+  });
 });

@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://m2m.exchange/schemas/v1.1/payment-option.json",
+  "title": "PaymentOption (M2M/1.1 §2) — discriminated union on scheme",
+  "oneOf": [
+    {
+      "title": "x402-exact (v1)",
+      "type": "object",
+      "required": ["scheme", "network", "maxAmountRequired", "resource", "payTo", "asset", "maxTimeoutSeconds"],
+      "properties": {
+        "scheme": { "const": "exact" },
+        "network": { "type": "string" },
+        "maxAmountRequired": { "$ref": "../common.json#/$defs/BaseUnitAmount" },
+        "resource": { "type": "string" },
+        "payTo": { "$ref": "../common.json#/$defs/EvmAddress" },
+        "asset": { "$ref": "../common.json#/$defs/EvmAddress" },
+        "maxTimeoutSeconds": { "type": "integer", "minimum": 1 }
+      }
+    },
+    {
+      "title": "stripe-fiat (§2.2)",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scheme", "network", "maxAmountRequired", "currency", "paymentUrl", "expiresAt", "rail"],
+      "properties": {
+        "scheme": { "const": "fiat-stripe" },
+        "network": { "const": "stripe" },
+        "maxAmountRequired": { "$ref": "../common.json#/$defs/BaseUnitAmount", "description": "Fiat minor units (cents), integer string." },
+        "currency": { "type": "string", "pattern": "^[a-z]{3}$", "description": "ISO 4217 lowercase." },
+        "paymentUrl": { "type": "string", "format": "uri" },
+        "expiresAt": { "$ref": "../common.json#/$defs/UnixSeconds" },
+        "rail": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["processor", "statementDescriptor"],
+          "properties": {
+            "processor": { "const": "stripe" },
+            "statementDescriptor": { "type": "string", "maxLength": 22 }
+          }
+        }
+      }
+    },
+    {
+      "title": "m2m-prepaid (§2.3)",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scheme", "network", "maxAmountRequired", "asset", "account"],
+      "properties": {
+        "scheme": { "const": "prepaid" },
+        "network": { "const": "m2m-ledger" },
+        "maxAmountRequired": { "$ref": "../common.json#/$defs/BaseUnitAmount" },
+        "asset": { "const": "USD6", "description": "Synthetic ledger credit; not a token, not transferable." },
+        "account": { "type": "string", "minLength": 1 }
+      }
+    }
+  ]
+}

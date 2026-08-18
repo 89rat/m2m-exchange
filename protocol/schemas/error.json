@@ -25,7 +25,11 @@
             "ORDER_NOT_PAYABLE",
             "AMOUNT_MISMATCH",
             "RATE_LIMITED",
-            "INTERNAL"
+            "INTERNAL",
+            "INSUFFICIENT_BALANCE",
+            "RAIL_UNAVAILABLE",
+            "UNSUPPORTED_RAIL",
+            "TRUST_TIER_INSUFFICIENT"
           ]
         },
         "message": { "type": "string", "maxLength": 500 },
