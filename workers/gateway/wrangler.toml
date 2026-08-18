@@ -4,9 +4,14 @@ main = "src/index.ts"
 compatibility_date = "2026-08-11"
 compatibility_flags = ["nodejs_compat"]
 
-# Public face: custom domain on the codex402.dev zone. PENDING: zone must be
+# Consolidated under the code402.dev zone (same CF account).
+routes = [
+  { pattern = "gateway.code402.dev", custom_domain = true },
+]
+
+# Alternative public face on the codex402.dev zone. PENDING: zone must be
 # active in the Cloudflare account (nameservers switched at Namecheap) before
-# this route can attach — uncomment and `wrangler deploy` once it is.
+# this route can attach — add and `wrangler deploy` once it is.
 # routes = [
 #   { pattern = "codex402.dev", custom_domain = true },
 # ]

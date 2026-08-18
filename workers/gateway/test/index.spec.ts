@@ -76,11 +76,12 @@ describe("m2m-gateway", () => {
     };
     expect(body.m2mVersion).toBe(1);
     expect(body.services.length).toBeGreaterThanOrEqual(4);
+    const premium = new Set(["x402-probe", "vat-mod97", "forecast"]);
     for (const s of body.services) {
       expect(s.serviceId).toMatch(/^[a-z0-9][a-z0-9-]{2,62}$/);
       expect(s.endpoint).toMatch(/^\//);
       expect(s.pricing.mode).toBe("static");
-      expect(s.pricing.price!.amount).toBe("1000"); // $0.001, integer base units
+      expect(s.pricing.price!.amount).toBe(premium.has(s.serviceId) ? "5000" : "1000");
       expect(s.pricing.price!.asset).toMatch(/^0x[0-9a-fA-F]{40}$/);
       expect(s.pricing.price!.network).toBe("base-sepolia");
     }
@@ -96,7 +97,7 @@ describe("m2m-gateway", () => {
   });
 
   it("new services are paywalled: /api/x402-probe and /api/vat-check return 402 when unpaid", async () => {
-    for (const path of ["/api/x402-probe", "/api/vat-check"]) {
+    for (const path of ["/api/x402-probe", "/api/vat-check", "/api/forecast"]) {
       const res = await SELF.fetch(`http://example.com${path}`, {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -104,7 +105,7 @@ describe("m2m-gateway", () => {
       });
       expect(res.status).toBe(402);
       const body = (await res.json()) as PaymentRequiredBody;
-      expect(body.accepts[0]!.maxAmountRequired).toBe("1000");
+      expect(body.accepts[0]!.maxAmountRequired).toBe("5000"); // premium tier
       expect(body.accepts[0]!.resource).toContain(path);
     }
   });

@@ -13,6 +13,8 @@
 
 export const M2M_VERSION = 1 as const;
 
+export * from "./fees.js";
+
 /** EIP-55 checksummed or lowercase EVM address. */
 export type EvmAddress = `0x${string}`;
 

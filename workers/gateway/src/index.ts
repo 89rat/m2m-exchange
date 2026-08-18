@@ -20,10 +20,12 @@ export interface Bindings {
 }
 
 const NETWORK = "base-sepolia";
-const PRICE = "$0.001";
+const PRICE_BASIC = "$0.001";
+const PRICE_PREMIUM = "$0.005";
 
 /** USDC (Base Sepolia) base-unit amount for $0.001 — 6 decimals, integer string (M2M/1 §2.3). */
 const PRICE_BASE_UNITS = "1000";
+const PRICE_PREMIUM_BASE_UNITS = "5000";
 const USDC_BASE_SEPOLIA = "0x036CbD53842c5426634e7929541eC2318f3dCF7e";
 
 /**
@@ -33,6 +35,8 @@ const USDC_BASE_SEPOLIA = "0x036CbD53842c5426634e7929541eC2318f3dCF7e";
  */
 function serviceDescriptors(env: Bindings): ServiceDescriptor[] {
   const staticPrice = { amount: PRICE_BASE_UNITS, asset: USDC_BASE_SEPOLIA as `0x${string}`, network: NETWORK };
+  const premiumPrice = { amount: PRICE_PREMIUM_BASE_UNITS, asset: USDC_BASE_SEPOLIA as `0x${string}`, network: NETWORK };
+  // Premium tier: $0.005 = 5000 USDC base units (integer string, M2M/1 §2.3).
   return [
     {
       m2mVersion: M2M_VERSION,
@@ -60,7 +64,7 @@ function serviceDescriptors(env: Bindings): ServiceDescriptor[] {
         "Probes any https URL for a valid x402 402 paywall and returns normalized price/network/payTo terms. Built for agents that need to verify a payable endpoint before budgeting.",
       endpoint: "/api/x402-probe",
       method: "POST",
-      pricing: { mode: "static", price: staticPrice },
+      pricing: { mode: "static", price: premiumPrice },
       inputSchema: {
         type: "object",
         properties: { url: { type: "string", format: "uri" } },
@@ -75,12 +79,22 @@ function serviceDescriptors(env: Bindings): ServiceDescriptor[] {
         "Deterministic ISO 7064 MOD-97-10 checksum validation of European VAT numbers. Machine-verifiable, no external calls.",
       endpoint: "/api/vat-check",
       method: "POST",
-      pricing: { mode: "static", price: staticPrice },
+      pricing: { mode: "static", price: premiumPrice },
       inputSchema: {
         type: "object",
         properties: { vat_number: { type: "string" } },
         required: ["vat_number"],
       },
+    },
+    {
+      m2mVersion: M2M_VERSION,
+      serviceId: "forecast",
+      name: "5-day forecast (premium tier)",
+      description:
+        "Premium-priced demo service ($0.005) proving tiered pricing on the same rail.",
+      endpoint: "/api/forecast",
+      method: "GET",
+      pricing: { mode: "static", price: premiumPrice },
     },
   ];
 }
@@ -106,7 +120,7 @@ export function createApp(env: Bindings) {
       "# m2m-exchange gateway",
       "> Machine-payable APIs on x402 (USDC, Base Sepolia). M2M/1 protocol; discovery at GET /v1/services.",
       "",
-      ...svcs.map((s) => `- [${s.name}](https://m2m-gateway.akrivis.workers.dev${s.endpoint}): $0.001/call — ${s.description ?? ""}`),
+      ...svcs.map((s) => `- [${s.name}](https://m2m-gateway.akrivis.workers.dev${s.endpoint}): priced per /v1/services — ${s.description ?? ""}`),
       "",
       "Pay: plain HTTP GET/POST -> 402 challenge -> retry with X-PAYMENT (EIP-3009 USDC). See protocol/PROTOCOL.md.",
     ];
@@ -120,24 +134,29 @@ export function createApp(env: Bindings) {
       env.SELLER_WALLET_ADDRESS as Address,
       {
         "/api/weather": {
-          price: PRICE,
+          price: PRICE_BASIC,
           network: NETWORK,
           config: { description: "Demo weather reading, paid in USDC on Base Sepolia" },
         },
         "/api/echo": {
-          price: PRICE,
+          price: PRICE_BASIC,
           network: NETWORK,
           config: { description: "Demo echo endpoint, paid in USDC on Base Sepolia" },
         },
         "/api/x402-probe": {
-          price: PRICE,
+          price: PRICE_PREMIUM,
           network: NETWORK,
-          config: { description: "Probe any URL for a valid x402 paywall, $0.001/call" },
+          config: { description: "Probe any URL for a valid x402 paywall, $0.005/call" },
         },
         "/api/vat-check": {
-          price: PRICE,
+          price: PRICE_PREMIUM,
           network: NETWORK,
-          config: { description: "ISO 7064 MOD-97 VAT checksum validation, $0.001/call" },
+          config: { description: "ISO 7064 MOD-97 VAT checksum validation, $0.005/call" },
+        },
+        "/api/forecast": {
+          price: PRICE_PREMIUM,
+          network: NETWORK,
+          config: { description: "5-day forecast, premium tier, $0.005/call" },
         },
       },
       env.FACILITATOR_URL
@@ -152,6 +171,20 @@ export function createApp(env: Bindings) {
       location: "Base Sepolia",
       temperatureC: 21.5,
       conditions: "clear",
+      paid: true,
+      paidTo: env.SELLER_WALLET_ADDRESS,
+    }),
+  );
+
+  // Paid route: 5-day forecast (premium tier demo).
+  app.get("/api/forecast", (c) =>
+    c.json({
+      location: "Base Sepolia",
+      days: [21.5, 22.1, 20.8, 19.9, 23.4].map((t, i) => ({
+        day: i + 1,
+        temperatureC: t,
+        conditions: i % 2 ? "clear" : "cloudy",
+      })),
       paid: true,
       paidTo: env.SELLER_WALLET_ADDRESS,
     }),
