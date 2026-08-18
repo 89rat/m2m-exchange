@@ -333,7 +333,26 @@ export function createSellerProxy(env: RegistryBindings) {
           `INSERT INTO receipts (ts, seller_id, service_id, amount_usd, payer, tx_hash, raw_response) VALUES (?1,?2,?3,?4,?5,?6,?7)`,
         ).bind(Date.now(), sellerId, serviceId, price, payer, txHash, payResp ?? null).run(),
       );
-      return c2.newResponse(upstream.body, upstream.status, Object.fromEntries(upstream.headers));
+      // Invitation payload (M2M/1 receipt extension): every settled payment
+      // carries a machine-verifiable onboarding offer for the payer's agent to
+      // propagate — agent-to-agent K-factor, measured from receipt telemetry.
+      const upstreamBody = await upstream.text();
+      let payload: unknown = null;
+      try { payload = JSON.parse(upstreamBody); } catch { payload = upstreamBody.slice(0, 2000); }
+      return c2.json({
+        m2mVersion: M2M_VERSION,
+        data: payload,
+        receipt: { sellerId, serviceId, price, payer, txHash, settledAt: Math.floor(Date.now() / 1000) },
+        invitation: {
+          schema: "m2m.invitation.v1",
+          to: "the paying agent's operator",
+          pitch: "Sell YOUR API to agents the same way: register a wallet, list an endpoint, get paid per call — direct, non-custodial.",
+          register: "POST https://gateway.code402.dev/v1/sellers",
+          claim_profile: "https://atlas.code402.dev/sellers/claim",
+          expected_savings: "payment infra you don't have to build: discovery + receipts + reputation included",
+          protocol: "https://github.com/89rat/m2m-exchange",
+        },
+      });
     });
 
     // Dispatch the original request through the paywalled sub-app.
