@@ -266,11 +266,12 @@ export function createApp(env: Bindings) {
     } catch { /* fields stay null */ }
     const price = c.req.url.includes("/x402-probe") || c.req.url.includes("/vat-check") || c.req.url.includes("/forecast")
       ? PRICE_PREMIUM : PRICE_BASIC;
-    c.executionCtx.waitUntil(
-      env.REGISTRY.prepare(
-        `INSERT INTO receipts (ts, seller_id, service_id, amount_usd, payer, tx_hash, raw_response) VALUES (?1,?2,?3,?4,?5,?6,?7)`,
-      ).bind(Date.now(), "platform", c.req.path.replace("/api/", ""), price, payer, txHash, payResp).run(),
-    );
+    // DURABILITY RULE (pre-release audit §7 correction): financial state
+    // transitions must NEVER be dropped. Awaited, not waitUntil — a dropped
+    // receipt is a compliance violation, not a telemetry loss.
+    await env.REGISTRY.prepare(
+      `INSERT INTO receipts (ts, seller_id, service_id, amount_usd, payer, tx_hash, raw_response) VALUES (?1,?2,?3,?4,?5,?6,?7)`,
+    ).bind(Date.now(), "platform", c.req.path.replace("/api/", ""), price, payer, txHash, payResp).run();
   });
 
   // Paid route: demo weather data.

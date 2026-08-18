@@ -343,11 +343,10 @@ export function createSellerProxy(env: RegistryBindings) {
         payer = pr?.payer ?? null;
         txHash = pr?.transaction ?? pr?.txHash ?? null;
       } catch { /* receipt fields stay null; settle still verified by middleware */ }
-      c2.executionCtx.waitUntil(
-        env.REGISTRY.prepare(
-          `INSERT INTO receipts (ts, seller_id, service_id, amount_usd, payer, tx_hash, raw_response) VALUES (?1,?2,?3,?4,?5,?6,?7)`,
-        ).bind(Date.now(), sellerId, serviceId, price, payer, txHash, payResp ?? null).run(),
-      );
+      // DURABILITY RULE (pre-release audit §7): awaited, never dropped.
+      await env.REGISTRY.prepare(
+        `INSERT INTO receipts (ts, seller_id, service_id, amount_usd, payer, tx_hash, raw_response) VALUES (?1,?2,?3,?4,?5,?6,?7)`,
+      ).bind(Date.now(), sellerId, serviceId, price, payer, txHash, payResp ?? null).run();
       // Invitation payload (M2M/1 receipt extension): every settled payment
       // carries a machine-verifiable onboarding offer for the payer's agent to
       // propagate — agent-to-agent K-factor, measured from receipt telemetry.

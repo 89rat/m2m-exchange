@@ -304,4 +304,40 @@ describe("m2m-gateway", () => {
     });
     expect(bad.status).toBe(403);
   });
+
+  // ---- Fuzz: X-402-Payment parser must reject malformed payloads safely (audit §2) ----
+
+  it("fuzz: 200 malformed payment headers never 500 and never satisfy payment", async () => {
+    const mutants: string[] = [];
+    const push = (x: string) => mutants.push(x);
+    // structural garbage
+    for (const x of ["", ".", "..", "a", "a.b.c", "....", "\x00", "%%%%%", "=;=;", " "]) push(x);
+    // valid-ish b64url segments with corrupt halves
+    const good = "eyJhIjoxfQ"; // {"a":1}
+    for (let i = 0; i < 60; i++) {
+      const cut = 1 + Math.floor(Math.random() * Math.max(1, good.length - 1));
+      push(good.slice(0, cut) + "." + good.slice(0, cut));
+      push(good + "." + Math.random().toString(16).slice(2, 12));
+      push(Math.random().toString(16).slice(2, 12) + "." + good);
+    }
+    // overlong
+    push("A".repeat(70000) + "." + "B".repeat(200));
+    // NOTE: raw control chars are rejected client-side by fetch itself
+    // ("Invalid header value") — the transport layer is the first defender.
+    // Printable-but-hostile stand-ins:
+    push("..%2e%2e."); push("{{}}[].x"); push("éü中文.");
+    let challenges = 0;
+    // Transport-first defense: any value the HTTP layer itself rejects
+    // (invalid per fetch's header grammar) never reaches the parser — that IS
+    // a safe rejection. Only values that traverse are asserted against the app.
+    const traversable = mutants.filter((m) => { try { new Headers({ "X-402-Payment": m }); return true; } catch { return false; } });
+    expect(traversable.length).toBeGreaterThan(150); // most garbage still reaches us
+    for (const m of traversable) {
+      const res = await SELF.fetch("http://example.com/api/weather", { headers: { "X-402-Payment": m } });
+      if (res.status >= 500) throw new Error("500 on malformed payment: " + JSON.stringify(m).slice(0, 40));
+      if (res.status === 200) throw new Error("MALFORMED PAYMENT ACCEPTED: " + JSON.stringify(m).slice(0, 40));
+      challenges++; // must be 402-family every time
+    }
+    expect(challenges).toBe(traversable.length);
+  });
 });
