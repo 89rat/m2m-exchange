@@ -123,12 +123,27 @@ export function createApp(env: Bindings) {
   app.route("/", prepaidApp(env));
   app.all("/s/:sellerId/:serviceId", createSellerProxy(env));
 
+  // Self-manifest so x402-native crawlers (incl. Coinbase Bazaar) find us.
+  app.get("/.well-known/x402.json", (c) =>
+    c.json({
+      name: "m2m-exchange gateway",
+      description: "Open M2M/1 commerce protocol gateway: sell any API to AI agents, per-call x402 USDC, non-custodial, prepaid credits, multi-tenant marketplace.",
+      services: "/v1/services",
+      sellers_api: "/v1/sellers",
+      protocol: "M2M/1 + M2M/1.1 rails",
+      discovery_index: "https://atlas.code402.dev",
+      directory: "https://atlas.code402.dev/directory.md",
+      settlement_layer: "https://code402.dev",
+    }),
+  );
+
   // LLM/crawler-readable index (free).
   app.get("/llms.txt", (c) => {
     const svcs = serviceDescriptors(env);
     const lines = [
       "# m2m-exchange gateway",
-      "> Machine-payable APIs on x402 (USDC, Base Sepolia). M2M/1 protocol; discovery at GET /v1/services.",
+      "> Machine-payable APIs on x402 (USDC, Base Sepolia). M2M/1 protocol; discovery at GET /v1/services. Sell your own API: POST /v1/sellers.",
+      "> Ecosystem: discovery index https://atlas.code402.dev (209+ services, /directory.md) · settlement layer https://code402.dev",
       "",
       ...svcs.map((s) => `- [${s.name}](https://gateway.code402.dev${s.endpoint}): priced per /v1/services — ${s.description ?? ""}`),
       "",
