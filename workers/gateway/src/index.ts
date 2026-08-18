@@ -5,6 +5,7 @@ import type { Resource } from "x402/types";
 import { M2M_VERSION } from "@m2m/protocol";
 import type { ServiceDescriptor, ServiceList } from "@m2m/protocol";
 import { registryApp, dynamicServiceDescriptors, createSellerProxy } from "./registry";
+import { prepaidApp, createPrepaidDebitMiddleware, creditAccount } from "./prepaid";
 
 /**
  * Environment bindings for the gateway worker.
@@ -119,6 +120,7 @@ export function createApp(env: Bindings) {
 
   // Multi-tenant: seller onboarding + dynamic per-seller payTo routes.
   app.route("/", registryApp(env));
+  app.route("/", prepaidApp(env));
   app.all("/s/:sellerId/:serviceId", createSellerProxy(env));
 
   // LLM/crawler-readable index (free).
@@ -133,6 +135,61 @@ export function createApp(env: Bindings) {
       "Pay: plain HTTP GET/POST -> 402 challenge -> retry with X-PAYMENT (EIP-3009 USDC). See protocol/PROTOCOL.md.",
     ];
     return c.text(lines.join("\n"));
+  });
+
+  // Prepaid top-up SKUs (x402-paid; discrete amounts because middleware prices are static).
+  const TOPUP_SKUS: Record<string, string> = { usd1: "$1", usd5: "$5", usd20: "$20" };
+  app.use("/v1/accounts/topup/:sku", async (c, next) => {
+    const sku = c.req.param("sku");
+    if (!(sku in TOPUP_SKUS)) return c.json({ error: "sku must be usd1|usd5|usd20" }, 400);
+    const sub = new (await import("hono")).Hono();
+    const { paymentMiddleware } = await import("x402-hono");
+    sub.use("*", paymentMiddleware(
+      env.SELLER_WALLET_ADDRESS as Address,
+      { [`/v1/accounts/topup/${sku}`]: { price: TOPUP_SKUS[sku]!, network: NETWORK, config: { description: `Prepaid credit top-up ${TOPUP_SKUS[sku]}` } } },
+      undefined,
+    ));
+    sub.get("*", async (c2: any) => {
+      const payResp = c2.req.header("x-payment-response");
+      let payer: string | null = null; let txHash = "unknown";
+      if (payResp) {
+        try {
+          const pr = JSON.parse(payResp) as { payer?: string; transaction?: string };
+          payer = pr.payer ?? null; txHash = pr.transaction ?? "unknown";
+        } catch { /* settled by middleware */ }
+      }
+      if (!payer) return c2.json({ m2mVersion: M2M_VERSION, paid: true, credited: false, note: "settled but payer unknown; contact support with txHash" });
+      const usd = Number(TOPUP_SKUS[sku]!.replace("$", ""));
+      c2.executionCtx.waitUntil(
+        creditAccount(env.REGISTRY, payer, BigInt(Math.round(usd * 1e6)).toString(), `topup:${txHash}`).catch(() => {}),
+      );
+      return c2.json({ m2mVersion: M2M_VERSION, paid: true, credited: true, amount_usd6: BigInt(Math.round(usd * 1e6)).toString(), account_wallet: payer });
+    });
+    return sub.fetch(new Request(c.req.url, { headers: c.req.raw.headers }), env, c.executionCtx);
+  });
+
+  // Prepaid credits: bearer key + sufficient balance = serve + debit (skips x402).
+  const firstPartyPrices: Record<string, string> = {
+    "/api/weather": PRICE_BASIC, "/api/echo": PRICE_BASIC,
+    "/api/x402-probe": PRICE_PREMIUM, "/api/vat-check": PRICE_PREMIUM, "/api/forecast": PRICE_PREMIUM,
+  };
+  app.use("/api/*", createPrepaidDebitMiddleware(env, (p) => firstPartyPrices[p] ?? null));
+
+  // x402-paid topup: ?usd=<amount> — after settle, credits the account ledger.
+  app.use("/v1/accounts/topup", async (c, next) => {
+    await next();
+    const payResp = c.req.header("x-payment-response");
+    if (!payResp || c.res.status >= 400) return;
+    let payer: string | null = null; let txHash = "unknown";
+    try {
+      const pr = JSON.parse(payResp) as { payer?: string; transaction?: string };
+      payer = pr.payer ?? null; txHash = pr.transaction ?? "unknown";
+    } catch { /* settled flag only */ }
+    const usd = Number(new URL(c.req.url).searchParams.get("usd") ?? "0");
+    if (!payer || !(usd > 0)) return;
+    c.executionCtx.waitUntil(
+      creditAccount(env.REGISTRY, payer, BigInt(Math.round(usd * 1e6)).toString(), `topup:${txHash}`).catch(() => {}),
+    );
   });
 
   // Everything under /api/* is paywalled via the x402 payment middleware.

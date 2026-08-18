@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://m2m.exchange/schemas/v1.1/ledger-entry.json",
+  "title": "LedgerEntry (M2M/1.1 §5.1) — double-entry prepaid ledger record",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["entryId", "accountId", "direction", "amount", "refType", "refId", "createdAt", "idempotencyKey"],
+  "properties": {
+    "entryId": { "$ref": "../common.json#/$defs/ResourceId" },
+    "accountId": { "type": "string", "minLength": 1 },
+    "direction": { "enum": ["debit", "credit"] },
+    "amount": { "$ref": "../common.json#/$defs/BaseUnitAmount", "description": "USD6 integer base units." },
+    "refType": { "enum": ["topup", "spend", "refund", "fee", "payout"] },
+    "refId": { "type": "string", "minLength": 1 },
+    "createdAt": { "$ref": "../common.json#/$defs/UnixSeconds" },
+    "idempotencyKey": { "type": "string", "minLength": 8, "maxLength": 128 }
+  }
+}

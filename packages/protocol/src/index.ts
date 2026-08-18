@@ -14,6 +14,7 @@
 export const M2M_VERSION = 1 as const;
 
 export * from "./fees.js";
+export * from "./rails.js";
 
 /** EIP-55 checksummed or lowercase EVM address. */
 export type EvmAddress = `0x${string}`;
@@ -138,7 +139,7 @@ export interface Receipt {
   settledAt: UnixSeconds;
 }
 
-/** §7 error codes. */
+/** §7 error codes. v1.1 adds rail/prepaid codes (M2M-1.1 §8). */
 export type ErrorCode =
   | "UNSUPPORTED_VERSION"
   | "INVALID_MESSAGE"
@@ -151,7 +152,11 @@ export type ErrorCode =
   | "ORDER_NOT_PAYABLE"
   | "AMOUNT_MISMATCH"
   | "RATE_LIMITED"
-  | "INTERNAL";
+  | "INTERNAL"
+  | "INSUFFICIENT_BALANCE"
+  | "RAIL_UNAVAILABLE"
+  | "UNSUPPORTED_RAIL"
+  | "TRUST_TIER_INSUFFICIENT";
 
 /** §7 — all non-2xx M2M/1 responses. */
 export interface ErrorObject {
