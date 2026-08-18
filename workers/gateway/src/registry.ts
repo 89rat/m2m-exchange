@@ -197,6 +197,21 @@ export function registryApp(env: RegistryBindings): Hono<{ Bindings: RegistryBin
   });
 
   // ---- Seller onboarding (free, self-serve) ----
+  // GET: registration guide (humans landing here from the storefront CTA).
+  app.get("/v1/sellers", (c) =>
+    c.json({
+      m2mVersion: M2M_VERSION,
+      how_to_register: {
+        step_1: 'POST /v1/sellers { "id": "<slug>", "wallet": "0x…", "name": "Your API" }',
+        step_2: "POST /v1/sellers/{id}/services { serviceId, upstream_url, price_usd }",
+        step_3: "payments flow direct to your wallet; we route, attest, and invoice 2%",
+      },
+      verify_ownership: "POST /v1/sellers/{id}/verify-challenge then /verify (EIP-191)",
+      human_friendly: "https://atlas.code402.dev/sellers/claim",
+      protocol: "https://github.com/89rat/m2m-exchange",
+    }),
+  );
+
   app.post("/v1/sellers", async (c) => {
     const body = (await c.req.json<Record<string, unknown>>().catch(() => ({}))) as {
       id?: string; wallet?: string; name?: string;
