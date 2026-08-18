@@ -109,4 +109,45 @@ describe("m2m-gateway", () => {
       expect(body.accepts[0]!.resource).toContain(path);
     }
   });
+
+  // ---- Multi-tenant registry ----
+
+  it("seller onboarding: POST /v1/sellers + listing -> dynamic /v1/services entry", async () => {
+    const reg = await SELF.fetch("http://example.com/v1/sellers", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ id: "acme", wallet: "0x1111111111111111111111111111111111111111", name: "ACME APIs" }),
+    });
+    expect(reg.status).toBe(201);
+
+    const list = await SELF.fetch("http://example.com/v1/sellers/acme/services", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ serviceId: "holidays", upstream_url: "https://example.com/holidays", price_usd: "$0.05", description: "Holiday calendar" }),
+    });
+    expect(list.status).toBe(201);
+
+    const svc = await SELF.fetch("http://example.com/v1/services");
+    const body = (await svc.json()) as { services: { serviceId: string; pricing: { price: { amount: string } } }[] };
+    const entry = body.services.find((s) => s.serviceId === "acme-holidays");
+    expect(entry).toBeDefined();
+    expect(entry!.pricing.price.amount).toBe("50000"); // $0.05 = 50000 base units
+  });
+
+  it("dynamic listing 402 challenge pays the SELLER wallet, not the platform", async () => {
+    const res = await SELF.fetch("http://example.com/s/acme/holidays");
+    expect(res.status).toBe(402);
+    const body = (await res.json()) as PaymentRequiredBody;
+    expect(body.accepts[0]!.payTo.toLowerCase()).toBe("0x1111111111111111111111111111111111111111");
+    expect(body.accepts[0]!.maxAmountRequired).toBe("50000");
+    expect(body.accepts[0]!.resource).toContain("/s/acme/holidays");
+  });
+
+  it("unknown listing returns M2M/1 SERVICE_NOT_FOUND error object", async () => {
+    const res = await SELF.fetch("http://example.com/s/acme/nope");
+    expect(res.status).toBe(404);
+    const body = (await res.json()) as { m2mVersion: number; error: { code: string } };
+    expect(body.m2mVersion).toBe(1);
+    expect(body.error.code).toBe("SERVICE_NOT_FOUND");
+  });
 });

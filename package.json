@@ -10,7 +10,7 @@
   ],
   "scripts": {
     "dev": "npm run dev -w @m2m/gateway",
-    "test": "npm run test -w @m2m/gateway",
+    "test": "npm run test -w @m2m/gateway && npm run test -w @m2m/protocol",
     "typecheck": "npm run typecheck -w @m2m/gateway && npm run typecheck -w @m2m/buyer && npm run typecheck -w @m2m/protocol",
     "buy": "npm run start -w @m2m/buyer"
   },

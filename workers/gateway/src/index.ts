@@ -4,6 +4,7 @@ import { paymentMiddleware } from "x402-hono";
 import type { Resource } from "x402/types";
 import { M2M_VERSION } from "@m2m/protocol";
 import type { ServiceDescriptor, ServiceList } from "@m2m/protocol";
+import { registryApp, dynamicServiceDescriptors, createSellerProxy } from "./registry";
 
 /**
  * Environment bindings for the gateway worker.
@@ -17,6 +18,8 @@ export interface Bindings {
    * (https://x402.org/facilitator) built into the x402 package — no key needed.
    */
   FACILITATOR_URL?: string;
+  /** Multi-tenant registry (sellers, listings, receipts). */
+  REGISTRY: D1Database;
 }
 
 const NETWORK = "base-sepolia";
@@ -108,10 +111,15 @@ export function createApp(env: Bindings) {
   );
 
   // M2M/1 §6.1 discovery: machine-readable storefront (free).
-  app.get("/v1/services", (c) => {
-    const body: ServiceList = { m2mVersion: M2M_VERSION, services: serviceDescriptors(env) };
+  app.get("/v1/services", async (c) => {
+    const dynamic = await dynamicServiceDescriptors(env).catch(() => []);
+    const body: ServiceList = { m2mVersion: M2M_VERSION, services: [...serviceDescriptors(env), ...dynamic] };
     return c.json(body);
   });
+
+  // Multi-tenant: seller onboarding + dynamic per-seller payTo routes.
+  app.route("/", registryApp(env));
+  app.all("/s/:sellerId/:serviceId", createSellerProxy(env));
 
   // LLM/crawler-readable index (free).
   app.get("/llms.txt", (c) => {
@@ -120,7 +128,7 @@ export function createApp(env: Bindings) {
       "# m2m-exchange gateway",
       "> Machine-payable APIs on x402 (USDC, Base Sepolia). M2M/1 protocol; discovery at GET /v1/services.",
       "",
-      ...svcs.map((s) => `- [${s.name}](https://m2m-gateway.akrivis.workers.dev${s.endpoint}): priced per /v1/services — ${s.description ?? ""}`),
+      ...svcs.map((s) => `- [${s.name}](https://gateway.code402.dev${s.endpoint}): priced per /v1/services — ${s.description ?? ""}`),
       "",
       "Pay: plain HTTP GET/POST -> 402 challenge -> retry with X-PAYMENT (EIP-3009 USDC). See protocol/PROTOCOL.md.",
     ];

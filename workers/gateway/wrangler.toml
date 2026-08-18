@@ -23,3 +23,9 @@ routes = [
 # receiving address, not a secret, so it lives here as a plain var.
 [vars]
 SELLER_WALLET_ADDRESS = "0x2CC9237752CFEe65dB46530a958469E7ff12ac6B"
+
+[[d1_databases]]
+binding = "REGISTRY"
+database_name = "m2m-registry"
+database_id = "0014229c-50db-442a-86ec-ab29f978299d"
+migrations_dir = "migrations"

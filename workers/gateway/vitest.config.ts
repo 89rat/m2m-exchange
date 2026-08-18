@@ -10,6 +10,7 @@ export default defineConfig({
           // Deterministic throwaway address, used only in tests.
           SELLER_WALLET_ADDRESS: "0x000000000000000000000000000000000000dEaD",
         },
+        d1Databases: { REGISTRY: "registry" },
       },
     }),
   ],

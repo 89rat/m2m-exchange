@@ -13,7 +13,7 @@
     "viem": "^2.55.17",
     "x402": "^1.2.0",
     "x402-hono": "^1.2.0",
-    "@m2m/protocol": "workspace:*"
+    "@m2m/protocol": "*"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.21.3",
