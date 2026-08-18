@@ -1,0 +1,11 @@
+{
+  "name": "@m2m/tollbooth-client",
+  "version": "0.1.0",
+  "description": "Invisible-wallet fetch wrapper: transparently pays Code402/x402 402 challenges (JCS + EIP-191) and returns the 200 data.",
+  "type": "module",
+  "main": "tollbooth.ts",
+  "keywords": ["x402", "http402", "code402", "ai-agents", "payments", "usdc"],
+  "license": "MIT",
+  "repository": { "type": "git", "url": "https://github.com/89rat/m2m-exchange" },
+  "dependencies": { "canonicalize": "^2.1.0", "viem": "^2.55.17" }
+}
