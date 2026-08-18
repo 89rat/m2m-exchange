@@ -106,6 +106,17 @@ function serviceDescriptors(env: Bindings): ServiceDescriptor[] {
 export function createApp(env: Bindings) {
   const app = new Hono<{ Bindings: Bindings }>();
 
+  // IndexNow key file + ping endpoint.
+  app.get("/gatew2e061f0cc950fd261c3783209b1b913a.txt", (c) => c.text("gatew2e061f0cc950fd261c3783209b1b913a\n"));
+  app.get("/admin/indexnow", async (c) => {
+    const urls = ["https://gateway.code402.dev/", "https://gateway.code402.dev/v1/services", "https://gateway.code402.dev/llms.txt"];
+    const res = await fetch("https://api.indexnow.org/indexnow", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ host: "gateway.code402.dev", key: "gatew2e061f0cc950fd261c3783209b1b913a", keyLocation: "https://gateway.code402.dev/gatew2e061f0cc950fd261c3783209b1b913a.txt", urlList: urls }),
+    });
+    return c.json({ pinged: urls.length, indexnow_status: res.status });
+  });
+
   // Free route — no payment required.
   app.get("/healthz", (c) =>
     c.json({ status: "ok", service: "m2m-gateway", network: NETWORK }),
