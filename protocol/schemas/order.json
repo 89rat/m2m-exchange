@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://m2m.exchange/schemas/v1/order.json",
+  "title": "Order (M2M/1 §4.5) — buyer acceptance of a quote",
+  "description": "POST body contains only m2mVersion + quoteId. The 201 response adds orderId, price, expiresAt and the x402 accepts[] payment requirements.",
+  "oneOf": [
+    {
+      "title": "OrderRequest (POST /v1/orders body)",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["m2mVersion", "quoteId"],
+      "properties": {
+        "m2mVersion": { "const": 1 },
+        "quoteId": { "$ref": "common.json#/$defs/ResourceId" }
+      }
+    },
+    {
+      "title": "Order (201 response)",
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["m2mVersion", "orderId", "quoteId", "serviceId", "price", "payTo", "expiresAt", "accepts"],
+      "properties": {
+        "m2mVersion": { "const": 1 },
+        "orderId": { "$ref": "common.json#/$defs/ResourceId" },
+        "quoteId": { "$ref": "common.json#/$defs/ResourceId" },
+        "serviceId": { "$ref": "common.json#/$defs/ResourceId" },
+        "price": { "$ref": "common.json#/$defs/MoneyAmount" },
+        "payTo": { "$ref": "common.json#/$defs/EvmAddress" },
+        "expiresAt": { "$ref": "common.json#/$defs/UnixSeconds" },
+        "accepts": {
+          "type": "array",
+          "minItems": 1,
+          "description": "x402 v1 payment requirements for this order's resource URL. Must agree with price per §6.4.",
+          "items": {
+            "type": "object",
+            "required": ["scheme", "network", "maxAmountRequired", "resource", "payTo", "asset", "maxTimeoutSeconds"],
+            "properties": {
+              "scheme": { "type": "string" },
+              "network": { "type": "string" },
+              "maxAmountRequired": { "$ref": "common.json#/$defs/BaseUnitAmount" },
+              "resource": { "type": "string" },
+              "payTo": { "$ref": "common.json#/$defs/EvmAddress" },
+              "asset": { "$ref": "common.json#/$defs/EvmAddress" },
+              "maxTimeoutSeconds": { "type": "integer", "minimum": 1 }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

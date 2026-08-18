@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://m2m.exchange/schemas/v1/quote-request.json",
+  "title": "QuoteRequest (M2M/1 §4.3)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["m2mVersion", "serviceId"],
+  "properties": {
+    "m2mVersion": { "const": 1 },
+    "serviceId": { "$ref": "common.json#/$defs/ResourceId" },
+    "params": {
+      "type": "object",
+      "description": "Pricing-relevant parameters; must conform to the service's inputSchema if published."
+    }
+  }
+}

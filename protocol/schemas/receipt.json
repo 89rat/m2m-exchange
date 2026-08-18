@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://m2m.exchange/schemas/v1/receipt.json",
+  "title": "Receipt (M2M/1 §4.6) — proof of settled commerce",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["m2mVersion", "receiptId", "orderId", "serviceId", "price", "payer", "payTo", "txHash", "settledAt"],
+  "properties": {
+    "m2mVersion": { "const": 1 },
+    "receiptId": { "$ref": "common.json#/$defs/ResourceId" },
+    "orderId": {
+      "anyOf": [
+        { "$ref": "common.json#/$defs/ResourceId" },
+        { "type": "null" }
+      ],
+      "description": "null for static services (no order was placed)."
+    },
+    "serviceId": { "$ref": "common.json#/$defs/ResourceId" },
+    "price": { "$ref": "common.json#/$defs/MoneyAmount" },
+    "payer": { "$ref": "common.json#/$defs/EvmAddress" },
+    "payTo": { "$ref": "common.json#/$defs/EvmAddress" },
+    "txHash": {
+      "type": "string",
+      "pattern": "^0x[0-9a-fA-F]{64}$"
+    },
+    "settledAt": { "$ref": "common.json#/$defs/UnixSeconds" }
+  }
+}

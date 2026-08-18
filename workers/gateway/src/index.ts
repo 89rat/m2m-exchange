@@ -1,0 +1,240 @@
+import { Hono } from "hono";
+import type { Address } from "viem";
+import { paymentMiddleware } from "x402-hono";
+import type { Resource } from "x402/types";
+import { M2M_VERSION } from "@m2m/protocol";
+import type { ServiceDescriptor, ServiceList } from "@m2m/protocol";
+
+/**
+ * Environment bindings for the gateway worker.
+ * SELLER_WALLET_ADDRESS comes from .dev.vars locally / vars in wrangler.toml.
+ */
+export interface Bindings {
+  /** EVM address that receives USDC payments (the "seller" wallet). */
+  SELLER_WALLET_ADDRESS: string;
+  /**
+   * Optional facilitator override. Defaults to the public testnet facilitator
+   * (https://x402.org/facilitator) built into the x402 package — no key needed.
+   */
+  FACILITATOR_URL?: string;
+}
+
+const NETWORK = "base-sepolia";
+const PRICE = "$0.001";
+
+/** USDC (Base Sepolia) base-unit amount for $0.001 — 6 decimals, integer string (M2M/1 §2.3). */
+const PRICE_BASE_UNITS = "1000";
+const USDC_BASE_SEPOLIA = "0x036CbD53842c5426634e7929541eC2318f3dCF7e";
+
+/**
+ * M2M/1 §6.1 ServiceDescriptors. Static pricing (§4.2) — these services skip
+ * quote/order and use the plain x402 402 flow (§6.3). Quote/order endpoints
+ * land in P1.5 with D1 persistence.
+ */
+function serviceDescriptors(env: Bindings): ServiceDescriptor[] {
+  const staticPrice = { amount: PRICE_BASE_UNITS, asset: USDC_BASE_SEPOLIA as `0x${string}`, network: NETWORK };
+  return [
+    {
+      m2mVersion: M2M_VERSION,
+      serviceId: "weather",
+      name: "Weather reading",
+      description: "Current conditions snapshot (demo smoke test).",
+      endpoint: "/api/weather",
+      method: "GET",
+      pricing: { mode: "static", price: staticPrice },
+    },
+    {
+      m2mVersion: M2M_VERSION,
+      serviceId: "echo",
+      name: "Echo",
+      description: "Echoes the paid request body back (integration smoke test).",
+      endpoint: "/api/echo",
+      method: "POST",
+      pricing: { mode: "static", price: staticPrice },
+    },
+    {
+      m2mVersion: M2M_VERSION,
+      serviceId: "x402-probe",
+      name: "x402 endpoint prober",
+      description:
+        "Probes any https URL for a valid x402 402 paywall and returns normalized price/network/payTo terms. Built for agents that need to verify a payable endpoint before budgeting.",
+      endpoint: "/api/x402-probe",
+      method: "POST",
+      pricing: { mode: "static", price: staticPrice },
+      inputSchema: {
+        type: "object",
+        properties: { url: { type: "string", format: "uri" } },
+        required: ["url"],
+      },
+    },
+    {
+      m2mVersion: M2M_VERSION,
+      serviceId: "vat-mod97",
+      name: "VAT number check (MOD-97)",
+      description:
+        "Deterministic ISO 7064 MOD-97-10 checksum validation of European VAT numbers. Machine-verifiable, no external calls.",
+      endpoint: "/api/vat-check",
+      method: "POST",
+      pricing: { mode: "static", price: staticPrice },
+      inputSchema: {
+        type: "object",
+        properties: { vat_number: { type: "string" } },
+        required: ["vat_number"],
+      },
+    },
+  ];
+}
+
+export function createApp(env: Bindings) {
+  const app = new Hono<{ Bindings: Bindings }>();
+
+  // Free route — no payment required.
+  app.get("/healthz", (c) =>
+    c.json({ status: "ok", service: "m2m-gateway", network: NETWORK }),
+  );
+
+  // M2M/1 §6.1 discovery: machine-readable storefront (free).
+  app.get("/v1/services", (c) => {
+    const body: ServiceList = { m2mVersion: M2M_VERSION, services: serviceDescriptors(env) };
+    return c.json(body);
+  });
+
+  // LLM/crawler-readable index (free).
+  app.get("/llms.txt", (c) => {
+    const svcs = serviceDescriptors(env);
+    const lines = [
+      "# m2m-exchange gateway",
+      "> Machine-payable APIs on x402 (USDC, Base Sepolia). M2M/1 protocol; discovery at GET /v1/services.",
+      "",
+      ...svcs.map((s) => `- [${s.name}](https://m2m-gateway.akrivis.workers.dev${s.endpoint}): $0.001/call — ${s.description ?? ""}`),
+      "",
+      "Pay: plain HTTP GET/POST -> 402 challenge -> retry with X-PAYMENT (EIP-3009 USDC). See protocol/PROTOCOL.md.",
+    ];
+    return c.text(lines.join("\n"));
+  });
+
+  // Everything under /api/* is paywalled via the x402 payment middleware.
+  app.use(
+    "/api/*",
+    paymentMiddleware(
+      env.SELLER_WALLET_ADDRESS as Address,
+      {
+        "/api/weather": {
+          price: PRICE,
+          network: NETWORK,
+          config: { description: "Demo weather reading, paid in USDC on Base Sepolia" },
+        },
+        "/api/echo": {
+          price: PRICE,
+          network: NETWORK,
+          config: { description: "Demo echo endpoint, paid in USDC on Base Sepolia" },
+        },
+        "/api/x402-probe": {
+          price: PRICE,
+          network: NETWORK,
+          config: { description: "Probe any URL for a valid x402 paywall, $0.001/call" },
+        },
+        "/api/vat-check": {
+          price: PRICE,
+          network: NETWORK,
+          config: { description: "ISO 7064 MOD-97 VAT checksum validation, $0.001/call" },
+        },
+      },
+      env.FACILITATOR_URL
+        ? { url: env.FACILITATOR_URL as Resource }
+        : undefined,
+    ),
+  );
+
+  // Paid route: demo weather data.
+  app.get("/api/weather", (c) =>
+    c.json({
+      location: "Base Sepolia",
+      temperatureC: 21.5,
+      conditions: "clear",
+      paid: true,
+      paidTo: env.SELLER_WALLET_ADDRESS,
+    }),
+  );
+
+  // Paid route: echoes the request body back.
+  app.all("/api/echo", async (c) => {
+    let body: unknown = null;
+    if (c.req.method !== "GET" && c.req.method !== "HEAD") {
+      body = await c.req.json().catch(() => null);
+    }
+    return c.json({ echo: body, method: c.req.method, paid: true });
+  });
+
+  // Paid route: real service — probe any URL for a valid x402 paywall
+  // and return normalized M2M/1-style terms.
+  app.post("/api/x402-probe", async (c) => {
+    const body = (await c.req.json<Record<string, unknown>>().catch(() => ({}))) as { url?: string };
+    const { url } = body;
+    if (!url || !/^https:\/\//.test(url)) {
+      return c.json({ error: "url (https) required" }, 400);
+    }
+    const started = Date.now();
+    try {
+      const res = await fetch(url, { signal: AbortSignal.timeout(10_000) });
+      const bodyText = res.status === 402 ? await res.text() : null;
+      let terms: unknown = null;
+      if (bodyText) {
+        try {
+          const j = JSON.parse(bodyText) as {
+            accepts?: Record<string, string>[] | null;
+          };
+          const a = j.accepts?.[0] ?? null;
+          if (a) {
+            terms = {
+              scheme: a.scheme ?? null,
+              network: a.network ?? null,
+              amount: a.maxAmountRequired ?? null,
+              payTo: a.payTo ?? null,
+              asset: a.asset ?? null,
+            };
+          }
+        } catch {
+          terms = null;
+        }
+      }
+      return c.json({
+        url,
+        status: res.status,
+        isX402: res.status === 402 && terms !== null,
+        terms,
+        latencyMs: Date.now() - started,
+        paid: true,
+      });
+    } catch (e) {
+      return c.json({ url, error: e instanceof Error ? e.message : "fetch failed", paid: true }, 502);
+    }
+  });
+
+  // Paid route: real service — deterministic VAT MOD-97 checksum (ISO 7064).
+  app.post("/api/vat-check", async (c) => {
+    const body = (await c.req.json<Record<string, unknown>>().catch(() => ({}))) as { vat_number?: string };
+    const { vat_number } = body;
+    const raw = String(vat_number ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+    if (!/^[A-Z]{2}[0-9A-Z]{2,18}$/.test(raw)) {
+      return c.json({ error: "vat_number must be like CC + 2-18 alphanumeric chars" }, 400);
+    }
+    const cc = raw.slice(0, 2);
+    const digits = raw.slice(2);
+    // ISO 7064 MOD 97-10: move letters to the end, A=10..Z=35, verify mod 97 == 1
+    const reordered = digits + String((cc.charCodeAt(0) - 55)) + String(cc.charCodeAt(1) - 55);
+    const numeric = reordered.replace(/[A-Z]/g, (ch) => String(ch.charCodeAt(0) - 55));
+    const check = numeric.split("").reduce((acc, d) => (acc * 10 + Number(d)) % 97, 0);
+    const valid = check === 1;
+    return c.json({ vat_number: raw, country: cc, valid, checksum: check, paid: true });
+  });
+
+  return app;
+}
+
+export default {
+  fetch(request, env, ctx) {
+    // Build the app per request so env bindings (payTo) are always current.
+    return createApp(env).fetch(request, env, ctx);
+  },
+} satisfies ExportedHandler<Bindings>;

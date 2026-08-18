@@ -1,0 +1,20 @@
+#:schema node_modules/wrangler/config-schema.json
+name = "m2m-gateway"
+main = "src/index.ts"
+compatibility_date = "2026-08-11"
+compatibility_flags = ["nodejs_compat"]
+
+# Public face: custom domain on the codex402.dev zone. PENDING: zone must be
+# active in the Cloudflare account (nameservers switched at Namecheap) before
+# this route can attach — uncomment and `wrangler deploy` once it is.
+# routes = [
+#   { pattern = "codex402.dev", custom_domain = true },
+# ]
+
+# Local secrets go in .dev.vars (gitignored) — see ../../.dev.vars.example.
+# SELLER_WALLET_ADDRESS=0x...
+
+# Deployed (production-on-testnet) config. The seller wallet is a public
+# receiving address, not a secret, so it lives here as a plain var.
+[vars]
+SELLER_WALLET_ADDRESS = "0x2CC9237752CFEe65dB46530a958469E7ff12ac6B"

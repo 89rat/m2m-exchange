@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://m2m.exchange/schemas/v1/error.json",
+  "title": "ErrorObject (M2M/1 §7)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["m2mVersion", "error"],
+  "properties": {
+    "m2mVersion": { "const": 1 },
+    "error": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message", "retryable"],
+      "properties": {
+        "code": {
+          "enum": [
+            "UNSUPPORTED_VERSION",
+            "INVALID_MESSAGE",
+            "SERVICE_NOT_FOUND",
+            "QUOTE_NOT_FOUND",
+            "QUOTE_REJECTED",
+            "QUOTE_EXPIRED",
+            "QUOTE_CONSUMED",
+            "ORDER_NOT_FOUND",
+            "ORDER_NOT_PAYABLE",
+            "AMOUNT_MISMATCH",
+            "RATE_LIMITED",
+            "INTERNAL"
+          ]
+        },
+        "message": { "type": "string", "maxLength": 500 },
+        "retryable": { "type": "boolean" }
+      }
+    }
+  }
+}

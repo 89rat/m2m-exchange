@@ -1,0 +1,23 @@
+{
+  "name": "m2m-exchange",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Machine-to-machine payment exchange on Cloudflare Workers + x402 (P0)",
+  "type": "module",
+  "workspaces": [
+    "workers/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w @m2m/gateway",
+    "test": "npm run test -w @m2m/gateway",
+    "typecheck": "npm run typecheck -w @m2m/gateway && npm run typecheck -w @m2m/buyer && npm run typecheck -w @m2m/protocol",
+    "buy": "npm run start -w @m2m/buyer"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

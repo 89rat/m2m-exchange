@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://m2m.exchange/schemas/v1/quote.json",
+  "title": "Quote (M2M/1 §4.4) — firm, single-use, expiring price commitment",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["m2mVersion", "quoteId", "serviceId", "price", "payTo", "expiresAt"],
+  "properties": {
+    "m2mVersion": { "const": 1 },
+    "quoteId": { "$ref": "common.json#/$defs/ResourceId" },
+    "serviceId": { "$ref": "common.json#/$defs/ResourceId" },
+    "price": { "$ref": "common.json#/$defs/MoneyAmount" },
+    "payTo": { "$ref": "common.json#/$defs/EvmAddress" },
+    "expiresAt": { "$ref": "common.json#/$defs/UnixSeconds" },
+    "termsHash": {
+      "type": "string",
+      "pattern": "^0x[0-9a-fA-F]{64}$",
+      "description": "keccak256 of the canonical JSON of the bound commercial terms."
+    }
+  }
+}

@@ -1,0 +1,20 @@
+# Copy this file to workers/gateway/.dev.vars and fill in real values.
+# .dev.vars is gitignored. NEVER commit real keys or use mainnet keys here.
+
+# --- Gateway (read by wrangler dev) -------------------------------------
+
+# EVM address that RECEIVES the USDC payments (the seller agent's wallet).
+# Any Base Sepolia test address works, e.g. a freshly generated test wallet.
+SELLER_WALLET_ADDRESS=0xYourSellerWalletAddressHere
+
+# Optional: override the payment facilitator. If unset, the x402 package
+# defaults to the public testnet facilitator at https://x402.org/facilitator
+# which requires NO API key.
+# FACILITATOR_URL=https://x402.org/facilitator
+
+# --- Buyer CLI (NOT read by wrangler; export in your shell instead) ------
+#
+# Private key of the buyer agent's Base Sepolia test wallet. Fund it with
+# testnet USDC from the Circle faucet: https://faucet.circle.com
+#   export BUYER_PRIVATE_KEY=0xYourBuyerPrivateKeyHere
+#   export GATEWAY_URL=http://localhost:8787   # optional, this is the default

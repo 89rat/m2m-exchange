@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://m2m.exchange/schemas/v1/service-descriptor.json",
+  "title": "ServiceDescriptor (M2M/1 §4.2)",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["m2mVersion", "serviceId", "name", "endpoint", "method", "pricing"],
+  "properties": {
+    "m2mVersion": { "const": 1 },
+    "serviceId": { "$ref": "common.json#/$defs/ResourceId" },
+    "name": { "type": "string", "minLength": 1, "maxLength": 120 },
+    "description": { "type": "string", "maxLength": 2000 },
+    "endpoint": {
+      "type": "string",
+      "pattern": "^/",
+      "description": "Path relative to the gateway origin, e.g. \"/api/weather\"."
+    },
+    "method": { "enum": ["GET", "POST", "PUT", "DELETE"] },
+    "pricing": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mode", "price"],
+          "properties": {
+            "mode": { "const": "static" },
+            "price": { "$ref": "common.json#/$defs/MoneyAmount" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mode"],
+          "properties": {
+            "mode": { "const": "quoted" }
+          }
+        }
+      ]
+    },
+    "inputSchema": {
+      "type": "object",
+      "description": "JSON Schema the paid call's params/body must conform to."
+    }
+  }
+}
