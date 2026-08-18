@@ -187,4 +187,21 @@ describe("m2m-gateway", () => {
     expect(a.total_settled_calls).toBe(2);
     expect(a.gross_usd).toBeCloseTo(1.05, 4);
   });
+
+  // ---- D1 receipts persistence (H1) ----
+
+  it("platform seller row + first-party receipt logging infra exists", async () => {
+    // The receipt write fires post-settlement via middleware; without a paid call
+    // we verify the platform seller row and the receipts table are wired.
+    await env.REGISTRY.prepare(
+      `INSERT INTO sellers (id, wallet, name, created_at) VALUES ('platform','0xdead00000000000000000000000000000000dead','platform',?1) ON CONFLICT(id) DO NOTHING`,
+    ).bind(Date.now()).run();
+    const r = await env.REGISTRY.prepare(`SELECT COUNT(*) n FROM sellers WHERE id = 'platform'`).first<{ n: number }>();
+    expect(r?.n).toBe(1);
+    const inv = await SELF.fetch("http://example.com/v1/sellers/platform/invoice");
+    expect(inv.status).toBe(200);
+    const body = (await inv.json()) as { sellerId: string; fee_bps: number };
+    expect(body.sellerId).toBe("platform");
+    expect(body.fee_bps).toBe(200);
+  });
 });

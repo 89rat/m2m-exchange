@@ -173,6 +173,28 @@ export function createApp(env: Bindings) {
     ),
   );
 
+  // D1 receipts persistence: log every settled first-party payment (H1).
+  // Runs after paymentMiddleware; X-PAYMENT-RESPONSE present = settled.
+  app.use("/api/*", async (c, next) => {
+    await next();
+    const payResp = c.req.header("x-payment-response");
+    if (!payResp || c.res.status >= 400) return;
+    let payer: string | null = null;
+    let txHash: string | null = null;
+    try {
+      const pr = JSON.parse(payResp) as { payer?: string; transaction?: string; txHash?: string };
+      payer = pr.payer ?? null;
+      txHash = pr.transaction ?? pr.txHash ?? null;
+    } catch { /* fields stay null */ }
+    const price = c.req.url.includes("/x402-probe") || c.req.url.includes("/vat-check") || c.req.url.includes("/forecast")
+      ? PRICE_PREMIUM : PRICE_BASIC;
+    c.executionCtx.waitUntil(
+      env.REGISTRY.prepare(
+        `INSERT INTO receipts (ts, seller_id, service_id, amount_usd, payer, tx_hash, raw_response) VALUES (?1,?2,?3,?4,?5,?6,?7)`,
+      ).bind(Date.now(), "platform", c.req.path.replace("/api/", ""), price, payer, txHash, payResp).run(),
+    );
+  });
+
   // Paid route: demo weather data.
   app.get("/api/weather", (c) =>
     c.json({
