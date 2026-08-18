@@ -4,6 +4,9 @@ main = "src/index.ts"
 compatibility_date = "2026-08-11"
 compatibility_flags = ["nodejs_compat"]
 
+[observability]
+enabled = true
+
 # Consolidated under the code402.dev zone (same CF account).
 routes = [
   { pattern = "gateway.code402.dev", custom_domain = true },
