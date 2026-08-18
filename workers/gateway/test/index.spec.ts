@@ -150,4 +150,41 @@ describe("m2m-gateway", () => {
     expect(body.m2mVersion).toBe(1);
     expect(body.error.code).toBe("SERVICE_NOT_FOUND");
   });
+
+  // ---- Monetization: invoice (stream 1), tier (stream 2), placement (stream 3) ----
+
+  it("invoice computes 2% take-rate from receipts via splitPayment", async () => {
+    // Register a seller and synthesize two settled receipts ($0.05 + $1.00)
+    await SELF.fetch("http://example.com/v1/sellers", { method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ id: "billco", wallet: "0x2222222222222222222222222222222222222222", name: "BillCo" }) });
+    const db = (globalThis as any).__TEST_D1;
+    // insert receipts through the app is not possible directly; use the registry binding via env
+    await env.REGISTRY.prepare(`INSERT INTO receipts (ts, seller_id, service_id, amount_usd) VALUES (?1,'billco','svc','$0.05'),(?1,'billco','svc','$1.00')`).bind(Date.now()).run();
+
+    const res = await SELF.fetch("http://example.com/v1/sellers/billco/invoice");
+    expect(res.status).toBe(200);
+    const inv = (await res.json()) as { transactions: number; gross_usdc_units: string; platform_fee_usdc_units: string; fee_bps: number };
+    expect(inv.transactions).toBe(2);
+    expect(inv.gross_usdc_units).toBe("1050000");
+    // 2% exact on both: $0.05 -> 1000 units, $1.00 -> 20000 units => 21000
+    expect(inv.platform_fee_usdc_units).toBe("21000");
+    expect(inv.fee_bps).toBe(200);
+  });
+
+  it("Pro tier lowers take-rate to 1.5%", async () => {
+    await SELF.fetch("http://example.com/v1/sellers/billco/tier", { method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ tier: "pro" }) });
+    const res = await SELF.fetch("http://example.com/v1/sellers/billco/invoice");
+    const inv = (await res.json()) as { fee_bps: number; fee_schedule_version: number };
+    expect(inv.fee_bps).toBe(150);
+    expect(inv.fee_schedule_version).toBe(2);
+  });
+
+  it("seller analytics returns own data free", async () => {
+    const res = await SELF.fetch("http://example.com/v1/sellers/billco/analytics");
+    expect(res.status).toBe(200);
+    const a = (await res.json()) as { total_settled_calls: number; gross_usd: number };
+    expect(a.total_settled_calls).toBe(2);
+    expect(a.gross_usd).toBeCloseTo(1.05, 4);
+  });
 });

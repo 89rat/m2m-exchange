@@ -9,6 +9,8 @@ import { paymentMiddleware } from "x402-hono";
 import type { Resource } from "x402/types";
 import { M2M_VERSION } from "@m2m/protocol";
 import type { ServiceDescriptor } from "@m2m/protocol";
+import { splitPayment, DEFAULT_FEE_SCHEDULE } from "@m2m/protocol";
+import type { FeeSchedule, FeeSplit } from "@m2m/protocol";
 
 export interface RegistryBindings {
   REGISTRY: D1Database;
@@ -26,8 +28,8 @@ let schemaReady = false;
 async function ensureSchema(db: D1Database): Promise<void> {
   if (schemaReady) return;
   await db.batch([
-    db.prepare(`CREATE TABLE IF NOT EXISTS sellers (id TEXT PRIMARY KEY, wallet TEXT NOT NULL UNIQUE, name TEXT NOT NULL, created_at INTEGER NOT NULL)`),
-    db.prepare(`CREATE TABLE IF NOT EXISTS listings (id INTEGER PRIMARY KEY AUTOINCREMENT, seller_id TEXT NOT NULL REFERENCES sellers(id) ON DELETE CASCADE, service_id TEXT NOT NULL, method TEXT NOT NULL DEFAULT 'GET', upstream_url TEXT NOT NULL, price_usd TEXT NOT NULL, description TEXT DEFAULT '', live INTEGER NOT NULL DEFAULT 1, created_at INTEGER NOT NULL, UNIQUE(seller_id, service_id))`),
+    db.prepare(`CREATE TABLE IF NOT EXISTS sellers (id TEXT PRIMARY KEY, wallet TEXT NOT NULL UNIQUE, name TEXT NOT NULL, created_at INTEGER NOT NULL, tier TEXT NOT NULL DEFAULT 'free', promoted INTEGER NOT NULL DEFAULT 0)`),
+    db.prepare(`CREATE TABLE IF NOT EXISTS listings (id INTEGER PRIMARY KEY AUTOINCREMENT, seller_id TEXT NOT NULL REFERENCES sellers(id) ON DELETE CASCADE, service_id TEXT NOT NULL, method TEXT NOT NULL DEFAULT 'GET', upstream_url TEXT NOT NULL, price_usd TEXT NOT NULL, description TEXT DEFAULT '', live INTEGER NOT NULL DEFAULT 1, created_at INTEGER NOT NULL, promoted INTEGER NOT NULL DEFAULT 0, UNIQUE(seller_id, service_id))`),
     db.prepare(`CREATE TABLE IF NOT EXISTS receipts (id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, seller_id TEXT NOT NULL REFERENCES sellers(id), service_id TEXT NOT NULL, amount_usd TEXT NOT NULL, payer TEXT, tx_hash TEXT, raw_response TEXT)`),
     db.prepare(`CREATE INDEX IF NOT EXISTS idx_receipts_seller ON receipts(seller_id, ts DESC)`),
   ]);
@@ -42,9 +44,100 @@ function priceOk(p: string): boolean {
   return /^\$?\d+(\.\d{1,6})?$/.test(p);
 }
 
+function scheduleForTier(tier: string): FeeSchedule {
+  return tier === "pro"
+    ? { feeScheduleVersion: 2, feeBps: 150, minFee: "100", maxFee: "1000000000000" } // Pro: 1.5%
+    : DEFAULT_FEE_SCHEDULE; // Free: 2%
+}
+
+/** Dollar string ("$0.05") -> base-unit integer string ("50000"). */
+function toUnits(price: string): string {
+  return BigInt(Math.round(Number(price.replace("$", "")) * 1e6)).toString();
+}
+
 export function registryApp(env: RegistryBindings): Hono<{ Bindings: RegistryBindings }> {
   const app = new Hono<{ Bindings: RegistryBindings }>();
   app.use("/v1/*", async (c, next) => { await ensureSchema(env.REGISTRY); await next(); });
+
+  // ---- Stream 1: take-rate invoice, computed from receipts via splitPayment ----
+  // Sellers see their own invoice + analytics free (own-data rule).
+  app.get("/v1/sellers/:sellerId/invoice", async (c) => {
+    const sellerId = c.req.param("sellerId");
+    const seller = await env.REGISTRY.prepare(`SELECT tier FROM sellers WHERE id = ?1`).bind(sellerId)
+      .first<{ tier: string }>();
+    if (!seller) return c.json({ m2mVersion: M2M_VERSION, error: { code: "SERVICE_NOT_FOUND", message: "unknown seller", retryable: false } }, 404);
+
+    const since = Number(c.req.query("since") ?? 0);
+    const rows = await env.REGISTRY.prepare(
+      `SELECT amount_usd FROM receipts WHERE seller_id = ?1 AND ts >= ?2`,
+    ).bind(sellerId, since).all<{ amount_usd: string }>();
+
+    const schedule = scheduleForTier(seller.tier);
+    let grossUnits = 0n;
+    const splits: FeeSplit[] = [];
+    for (const r of rows.results) {
+      const s = splitPayment(toUnits(r.amount_usd), schedule);
+      grossUnits += BigInt(s.gross);
+      splits.push(s);
+    }
+    let feeUnits = 0n;
+    for (const s of splits) feeUnits += BigInt(s.platformFee);
+
+    return c.json({
+      m2mVersion: M2M_VERSION,
+      sellerId,
+      tier: seller.tier,
+      period_start: since,
+      transactions: rows.results.length,
+      gross_usdc_units: grossUnits.toString(),
+      platform_fee_usdc_units: feeUnits.toString(),
+      seller_net_usdc_units: (grossUnits - feeUnits).toString(),
+      fee_schedule_version: schedule.feeScheduleVersion,
+      fee_bps: schedule.feeBps,
+      payment: "payable via x402 to the platform fee wallet (settles invoice)",
+      note: "Invoice model: fee invoiced monthly against settled receipts. Splitter contract planned.",
+    });
+  });
+
+  // ---- Seller analytics: own data, free forever ----
+  app.get("/v1/sellers/:sellerId/analytics", async (c) => {
+    const sellerId = c.req.param("sellerId");
+    const totals = await env.REGISTRY.prepare(
+      `SELECT COUNT(*) n, COALESCE(SUM(CAST(REPLACE(amount_usd,'$','') AS REAL)),0) gross
+       FROM receipts WHERE seller_id = ?1`,
+    ).bind(sellerId).first<{ n: number; gross: number }>();
+    const byService = await env.REGISTRY.prepare(
+      `SELECT service_id, COUNT(*) calls FROM receipts WHERE seller_id = ?1 GROUP BY service_id ORDER BY calls DESC`,
+    ).bind(sellerId).all();
+    const buyers = await env.REGISTRY.prepare(
+      `SELECT COUNT(DISTINCT payer) n FROM receipts WHERE seller_id = ?1 AND payer IS NOT NULL`,
+    ).bind(sellerId).first<{ n: number }>();
+    return c.json({
+      m2mVersion: M2M_VERSION, sellerId,
+      total_settled_calls: totals?.n ?? 0,
+      gross_usd: Number((totals?.gross ?? 0).toFixed(6)),
+      unique_buyers: buyers?.n ?? 0,
+      by_service: byService.results,
+    });
+  });
+
+  // ---- Stream 2: tier upgrade (Pro = 1.5% + analytics priority; billing via x402 later) ----
+  app.post("/v1/sellers/:sellerId/tier", async (c) => {
+    const body = (await c.req.json<Record<string, unknown>>().catch(() => ({}))) as { tier?: string };
+    if (body.tier !== "free" && body.tier !== "pro") return c.json({ error: "tier must be free|pro" }, 400);
+    const r = await env.REGISTRY.prepare(`UPDATE sellers SET tier = ?2 WHERE id = ?1`).bind(c.req.param("sellerId"), body.tier).run();
+    if (r.meta.changes === 0) return c.json({ error: "unknown seller" }, 404);
+    return c.json({ m2mVersion: M2M_VERSION, sellerId: c.req.param("sellerId"), tier: body.tier, fee_bps: scheduleForTier(body.tier).feeBps });
+  });
+
+  // ---- Stream 3: promoted placement (admin-set for now; self-serve purchase later) ----
+  app.post("/v1/sellers/:sellerId/services/:serviceId/promote", async (c) => {
+    const r = await env.REGISTRY.prepare(
+      `UPDATE listings SET promoted = 1 WHERE seller_id = ?1 AND service_id = ?2`,
+    ).bind(c.req.param("sellerId"), c.req.param("serviceId")).run();
+    if (r.meta.changes === 0) return c.json({ error: "unknown listing" }, 404);
+    return c.json({ m2mVersion: M2M_VERSION, promoted: true, note: "promoted listings sort first in /v1/services (labeled)" });
+  });
 
   // ---- Seller onboarding (free, self-serve) ----
   app.post("/v1/sellers", async (c) => {
@@ -102,9 +195,10 @@ export function registryApp(env: RegistryBindings): Hono<{ Bindings: RegistryBin
 export async function dynamicServiceDescriptors(env: RegistryBindings): Promise<ServiceDescriptor[]> {
   await ensureSchema(env.REGISTRY);
   const rows = await env.REGISTRY.prepare(
-    `SELECT l.seller_id, l.service_id, l.method, l.price_usd, l.description
-     FROM listings l JOIN sellers s ON s.id = l.seller_id WHERE l.live = 1 LIMIT 500`,
-  ).all<{ seller_id: string; service_id: string; method: string; price_usd: string; description: string }>();
+    `SELECT l.seller_id, l.service_id, l.method, l.price_usd, l.description, l.promoted
+     FROM listings l JOIN sellers s ON s.id = l.seller_id WHERE l.live = 1
+     ORDER BY l.promoted DESC, l.created_at ASC LIMIT 500`,
+  ).all<{ seller_id: string; service_id: string; method: string; price_usd: string; description: string; promoted: number }>();
   return rows.results.map((l) => {
     const dollars = Number(l.price_usd.replace("$", ""));
     // 6-decimal USDC base units, integer string (M2M/1 §2.3)
@@ -112,7 +206,7 @@ export async function dynamicServiceDescriptors(env: RegistryBindings): Promise<
     return {
       m2mVersion: M2M_VERSION,
       serviceId: `${l.seller_id}-${l.service_id}`,
-      name: `${l.seller_id}/${l.service_id}`,
+      name: `${l.promoted ? "★ " : ""}${l.seller_id}/${l.service_id}`,
       description: l.description || `Third-party listing (paid direct to seller wallet).`,
       endpoint: `/s/${l.seller_id}/${l.service_id}`,
       method: l.method as ServiceDescriptor["method"],
