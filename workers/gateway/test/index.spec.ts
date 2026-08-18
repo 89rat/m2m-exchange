@@ -254,4 +254,54 @@ describe("m2m-gateway", () => {
     const body = (await res.json()) as { accepts: { maxAmountRequired: string }[] };
     expect(body.accepts[0]!.maxAmountRequired).toBe("5000000"); // $5
   });
+
+  // ---- Hardening: SSRF guard + wallet ownership proof ----
+
+  it("SSRF guard rejects private/metadata upstream targets", async () => {
+    await SELF.fetch("http://example.com/v1/sellers", { method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ id: "evil", wallet: "0x3333333333333333333333333333333333333333", name: "Evil" }) });
+    for (const url of ["http://127.0.0.1/x", "http://10.0.0.1/x", "http://192.168.1.1/x", "http://169.254.169.254/latest/meta-data", "http://localhost/x", "ftp://example.com/x"]) {
+      const res = await SELF.fetch("http://example.com/v1/sellers/evil/services", {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ serviceId: "ssrf-test", upstream_url: url, price_usd: "$0.01" }),
+      });
+      expect(res.status).toBe(400);
+      expect(((await res.json()) as { error: string }).error).toContain("rejected");
+    }
+    // public https still accepted
+    const ok = await SELF.fetch("http://example.com/v1/sellers/evil/services", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ serviceId: "ok", upstream_url: "https://api.example.com/ok", price_usd: "$0.01" }),
+    });
+    expect(ok.status).toBe(201);
+  });
+
+  it("wallet ownership proof: EIP-191 challenge/verify roundtrip", async () => {
+    const { privateKeyToAccount } = await import("viem/accounts");
+    const account = privateKeyToAccount("0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80");
+    await SELF.fetch("http://example.com/v1/sellers", { method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ id: "prover", wallet: account.address, name: "Prover" }) });
+
+    const ch = await SELF.fetch("http://example.com/v1/sellers/prover/verify-challenge", { method: "POST" });
+    const { message } = (await ch.json()) as { message: string };
+    expect(message).toContain("code402 seller verification for prover:");
+
+    const signature = await account.signMessage({ message });
+    const v = await SELF.fetch("http://example.com/v1/sellers/prover/verify", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ signature }),
+    });
+    expect(v.status).toBe(200);
+    expect(((await v.json()) as { verified: boolean }).verified).toBe(true);
+
+    // wrong-signer signature must fail
+    const ch2 = await SELF.fetch("http://example.com/v1/sellers/prover/verify-challenge", { method: "POST" });
+    const { message: m2 } = (await ch2.json()) as { message: string };
+    const other = privateKeyToAccount("0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d"); // anvil #1
+    const bad = await SELF.fetch("http://example.com/v1/sellers/prover/verify", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ signature: await other.signMessage({ message: m2 }) }),
+    });
+    expect(bad.status).toBe(403);
+  });
 });

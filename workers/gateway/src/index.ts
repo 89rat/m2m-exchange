@@ -1,36 +1,29 @@
 import { Hono } from "hono";
 import type { Address } from "viem";
 import { paymentMiddleware } from "x402-hono";
-import type { Resource } from "x402/types";
 import { M2M_VERSION } from "@m2m/protocol";
 import type { ServiceDescriptor, ServiceList } from "@m2m/protocol";
 import { registryApp, dynamicServiceDescriptors, createSellerProxy } from "./registry";
 import { prepaidApp, createPrepaidDebitMiddleware, creditAccount } from "./prepaid";
+import { resolveNetwork, resolveFacilitator, usdcAddress, type NetworkBindings } from "./network";
 
 /**
  * Environment bindings for the gateway worker.
  * SELLER_WALLET_ADDRESS comes from .dev.vars locally / vars in wrangler.toml.
  */
-export interface Bindings {
+export interface Bindings extends NetworkBindings {
   /** EVM address that receives USDC payments (the "seller" wallet). */
   SELLER_WALLET_ADDRESS: string;
-  /**
-   * Optional facilitator override. Defaults to the public testnet facilitator
-   * (https://x402.org/facilitator) built into the x402 package — no key needed.
-   */
-  FACILITATOR_URL?: string;
   /** Multi-tenant registry (sellers, listings, receipts). */
   REGISTRY: D1Database;
 }
 
-const NETWORK = "base-sepolia";
 const PRICE_BASIC = "$0.001";
 const PRICE_PREMIUM = "$0.005";
 
-/** USDC (Base Sepolia) base-unit amount for $0.001 — 6 decimals, integer string (M2M/1 §2.3). */
+/** USDC base-unit amounts (6 decimals) as integer strings (M2M/1 §2.3). */
 const PRICE_BASE_UNITS = "1000";
 const PRICE_PREMIUM_BASE_UNITS = "5000";
-const USDC_BASE_SEPOLIA = "0x036CbD53842c5426634e7929541eC2318f3dCF7e";
 
 /**
  * M2M/1 §6.1 ServiceDescriptors. Static pricing (§4.2) — these services skip
@@ -38,8 +31,10 @@ const USDC_BASE_SEPOLIA = "0x036CbD53842c5426634e7929541eC2318f3dCF7e";
  * land in P1.5 with D1 persistence.
  */
 function serviceDescriptors(env: Bindings): ServiceDescriptor[] {
-  const staticPrice = { amount: PRICE_BASE_UNITS, asset: USDC_BASE_SEPOLIA as `0x${string}`, network: NETWORK };
-  const premiumPrice = { amount: PRICE_PREMIUM_BASE_UNITS, asset: USDC_BASE_SEPOLIA as `0x${string}`, network: NETWORK };
+  const network = resolveNetwork(env);
+  const usdc = usdcAddress(network);
+  const staticPrice = { amount: PRICE_BASE_UNITS, asset: usdc, network };
+  const premiumPrice = { amount: PRICE_PREMIUM_BASE_UNITS, asset: usdc, network };
   // Premium tier: $0.005 = 5000 USDC base units (integer string, M2M/1 §2.3).
   return [
     {
@@ -105,6 +100,8 @@ function serviceDescriptors(env: Bindings): ServiceDescriptor[] {
 
 export function createApp(env: Bindings) {
   const app = new Hono<{ Bindings: Bindings }>();
+  const network = resolveNetwork(env);
+  const facilitator = resolveFacilitator(env);
 
   // IndexNow key file + ping endpoint.
   app.get("/gatew2e061f0cc950fd261c3783209b1b913a.txt", (c) => c.text("gatew2e061f0cc950fd261c3783209b1b913a\n"));
@@ -119,7 +116,7 @@ export function createApp(env: Bindings) {
 
   // Free route — no payment required.
   app.get("/healthz", (c) =>
-    c.json({ status: "ok", service: "m2m-gateway", network: NETWORK }),
+    c.json({ status: "ok", service: "m2m-gateway", network }),
   );
 
   // M2M/1 §6.1 discovery: machine-readable storefront (free).
@@ -172,8 +169,8 @@ export function createApp(env: Bindings) {
     const { paymentMiddleware } = await import("x402-hono");
     sub.use("*", paymentMiddleware(
       env.SELLER_WALLET_ADDRESS as Address,
-      { [`/v1/accounts/topup/${sku}`]: { price: TOPUP_SKUS[sku]!, network: NETWORK, config: { description: `Prepaid credit top-up ${TOPUP_SKUS[sku]}` } } },
-      undefined,
+      { [`/v1/accounts/topup/${sku}`]: { price: TOPUP_SKUS[sku]!, network, config: { description: `Prepaid credit top-up ${TOPUP_SKUS[sku]}` } } },
+      facilitator,
     ));
     sub.get("*", async (c2: any) => {
       const payResp = c2.req.header("x-payment-response");
@@ -226,33 +223,31 @@ export function createApp(env: Bindings) {
       {
         "/api/weather": {
           price: PRICE_BASIC,
-          network: NETWORK,
+          network,
           config: { description: "Demo weather reading, paid in USDC on Base Sepolia" },
         },
         "/api/echo": {
           price: PRICE_BASIC,
-          network: NETWORK,
+          network,
           config: { description: "Demo echo endpoint, paid in USDC on Base Sepolia" },
         },
         "/api/x402-probe": {
           price: PRICE_PREMIUM,
-          network: NETWORK,
+          network,
           config: { description: "Probe any URL for a valid x402 paywall, $0.005/call" },
         },
         "/api/vat-check": {
           price: PRICE_PREMIUM,
-          network: NETWORK,
+          network,
           config: { description: "ISO 7064 MOD-97 VAT checksum validation, $0.005/call" },
         },
         "/api/forecast": {
           price: PRICE_PREMIUM,
-          network: NETWORK,
+          network,
           config: { description: "5-day forecast, premium tier, $0.005/call" },
         },
       },
-      env.FACILITATOR_URL
-        ? { url: env.FACILITATOR_URL as Resource }
-        : undefined,
+      facilitator,
     ),
   );
 

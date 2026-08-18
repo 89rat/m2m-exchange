@@ -19,7 +19,7 @@ import {
   type Signer,
 } from "x402-fetch";
 
-const NETWORK = "base-sepolia";
+const NETWORK = process.env.NETWORK ?? "base-sepolia"; // "base" for mainnet (real USDC)
 const GATEWAY_URL = process.env.GATEWAY_URL ?? "http://localhost:8787";
 
 function fail(message: string): never {

@@ -9,11 +9,12 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@coinbase/x402": "^1.0.1",
+    "@m2m/protocol": "*",
     "hono": "^4.13.2",
     "viem": "^2.55.17",
     "x402": "^1.2.0",
-    "x402-hono": "^1.2.0",
-    "@m2m/protocol": "*"
+    "x402-hono": "^1.2.0"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.21.3",

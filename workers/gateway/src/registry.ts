@@ -6,20 +6,16 @@
 import { Hono } from "hono";
 import type { Address } from "viem";
 import { paymentMiddleware } from "x402-hono";
-import type { Resource } from "x402/types";
 import { M2M_VERSION } from "@m2m/protocol";
 import type { ServiceDescriptor } from "@m2m/protocol";
 import { splitPayment, DEFAULT_FEE_SCHEDULE } from "@m2m/protocol";
 import type { FeeSchedule, FeeSplit } from "@m2m/protocol";
+import { resolveNetwork, resolveFacilitator, usdcAddress, type NetworkBindings } from "./network";
 
-export interface RegistryBindings {
+export interface RegistryBindings extends NetworkBindings {
   REGISTRY: D1Database;
   SELLER_WALLET_ADDRESS: string;
-  FACILITATOR_URL?: string;
 }
-
-const NETWORK = "base-sepolia";
-const USDC_BASE_SEPOLIA = "0x036CbD53842c5426634e7929541eC2318f3dCF7e";
 
 /** Idempotent schema (mirrors migrations/0001_registry.sql) — safe to call on
  *  every isolate start; guarantees the registry works even before migrations
@@ -28,7 +24,7 @@ let schemaReady = false;
 async function ensureSchema(db: D1Database): Promise<void> {
   if (schemaReady) return;
   await db.batch([
-    db.prepare(`CREATE TABLE IF NOT EXISTS sellers (id TEXT PRIMARY KEY, wallet TEXT NOT NULL UNIQUE, name TEXT NOT NULL, created_at INTEGER NOT NULL, tier TEXT NOT NULL DEFAULT 'free', promoted INTEGER NOT NULL DEFAULT 0)`),
+    db.prepare(`CREATE TABLE IF NOT EXISTS sellers (id TEXT PRIMARY KEY, wallet TEXT NOT NULL UNIQUE, name TEXT NOT NULL, created_at INTEGER NOT NULL, tier TEXT NOT NULL DEFAULT 'free', promoted INTEGER NOT NULL DEFAULT 0, verified INTEGER NOT NULL DEFAULT 0, verify_nonce TEXT)`),
     db.prepare(`CREATE TABLE IF NOT EXISTS listings (id INTEGER PRIMARY KEY AUTOINCREMENT, seller_id TEXT NOT NULL REFERENCES sellers(id) ON DELETE CASCADE, service_id TEXT NOT NULL, method TEXT NOT NULL DEFAULT 'GET', upstream_url TEXT NOT NULL, price_usd TEXT NOT NULL, description TEXT DEFAULT '', live INTEGER NOT NULL DEFAULT 1, created_at INTEGER NOT NULL, promoted INTEGER NOT NULL DEFAULT 0, UNIQUE(seller_id, service_id))`),
     db.prepare(`CREATE TABLE IF NOT EXISTS receipts (id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, seller_id TEXT NOT NULL REFERENCES sellers(id), service_id TEXT NOT NULL, amount_usd TEXT NOT NULL, payer TEXT, tx_hash TEXT, raw_response TEXT)`),
     db.prepare(`CREATE INDEX IF NOT EXISTS idx_receipts_seller ON receipts(seller_id, ts DESC)`),
@@ -38,6 +34,31 @@ async function ensureSchema(db: D1Database): Promise<void> {
 
 function slugOk(s: string): boolean {
   return /^[a-z0-9][a-z0-9-]{1,62}$/.test(s);
+}
+
+/** SSRF guard: reject private, loopback, link-local, metadata, and
+ *  non-HTTP(S) upstream targets. Cloudflare Workers cannot reach private
+ *  ranges without explicit bindings, but defense-in-depth is cheap. */
+export function upstreamAllowed(rawUrl: string): boolean {
+  let u: URL;
+  try { u = new URL(rawUrl); } catch { return false; }
+  if (u.protocol !== "https:" && u.protocol !== "http:") return false;
+  const h = u.hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  if (h === "localhost" || h.endsWith(".localhost") || h.endsWith(".internal") || h.endsWith(".local")) return false;
+  if (h === "metadata.google.internal" || h === "169.254.169.254") return false;
+  // Literal IPv4 / IPv6 in private/reserved space
+  const v4 = h.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (v4) {
+    const [a, b] = [Number(v4[1]), Number(v4[2])];
+    if (a === 0 || a === 10 || a === 127) return false;
+    if (a === 192 && b === 168) return false;
+    if (a === 172 && b >= 16 && b <= 31) return false;
+    if (a === 169 && b === 254) return false;
+    if (a >= 224) return false; // multicast/reserved
+    return true;
+  }
+  if (h.includes(":") && (h === "::1" || h.startsWith("fe80:") || h.startsWith("fc") || h.startsWith("fd"))) return false;
+  return true;
 }
 
 function priceOk(p: string): boolean {
@@ -121,6 +142,42 @@ export function registryApp(env: RegistryBindings): Hono<{ Bindings: RegistryBin
     });
   });
 
+  // ---- Wallet ownership proof (EIP-191 challenge/response) ----
+  app.post("/v1/sellers/:sellerId/verify-challenge", async (c) => {
+    const sellerId = c.req.param("sellerId");
+    const seller = await env.REGISTRY.prepare(`SELECT wallet FROM sellers WHERE id = ?1`).bind(sellerId).first<{ wallet: string }>();
+    if (!seller) return c.json({ error: "unknown seller" }, 404);
+    const bytes = new Uint8Array(16);
+    crypto.getRandomValues(bytes);
+    const nonce = "verify_" + Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
+    await env.REGISTRY.prepare(`UPDATE sellers SET verify_nonce = ?2 WHERE id = ?1`).bind(sellerId, nonce).run();
+    return c.json({
+      m2mVersion: M2M_VERSION,
+      message: `code402 seller verification for ${sellerId}: ${nonce}`,
+      note: "EIP-191 personal_sign this exact string with the registered wallet, then POST /verify",
+    });
+  });
+  app.post("/v1/sellers/:sellerId/verify", async (c) => {
+    const sellerId = c.req.param("sellerId");
+    const body = (await c.req.json<Record<string, unknown>>().catch(() => ({}))) as { signature?: string };
+    const seller = await env.REGISTRY.prepare(`SELECT wallet, verify_nonce FROM sellers WHERE id = ?1`).bind(sellerId)
+      .first<{ wallet: string; verify_nonce: string | null }>();
+    if (!seller || !seller.verify_nonce || !body.signature) {
+      return c.json({ error: "request a challenge first: POST /verify-challenge" }, 400);
+    }
+    const message = `code402 seller verification for ${sellerId}: ${seller.verify_nonce}`;
+    const { recoverMessageAddress } = await import("viem");
+    let recovered: string | null = null;
+    try {
+      recovered = await recoverMessageAddress({ message, signature: body.signature as `0x${string}` });
+    } catch { recovered = null; }
+    if (!recovered || recovered.toLowerCase() !== seller.wallet.toLowerCase()) {
+      return c.json({ error: "VERIFICATION_FAILED", recovered }, 403);
+    }
+    await env.REGISTRY.prepare(`UPDATE sellers SET verified = 1, verify_nonce = NULL WHERE id = ?1`).bind(sellerId).run();
+    return c.json({ m2mVersion: M2M_VERSION, sellerId, verified: true, wallet: seller.wallet });
+  });
+
   // ---- Stream 2: tier upgrade (Pro = 1.5% + analytics priority; billing via x402 later) ----
   app.post("/v1/sellers/:sellerId/tier", async (c) => {
     const body = (await c.req.json<Record<string, unknown>>().catch(() => ({}))) as { tier?: string };
@@ -166,7 +223,7 @@ export function registryApp(env: RegistryBindings): Hono<{ Bindings: RegistryBin
     };
     const serviceId = String(body.serviceId ?? "").toLowerCase();
     if (!slugOk(serviceId)) return c.json({ error: "serviceId must be [a-z0-9-]{2,63}" }, 400);
-    if (!body.upstream_url || !/^https:\/\//.test(body.upstream_url)) return c.json({ error: "upstream_url (https) required" }, 400);
+    if (!body.upstream_url || !upstreamAllowed(body.upstream_url)) return c.json({ error: "upstream_url rejected: must be https to a public target" }, 400);
     if (!body.price_usd || !priceOk(body.price_usd)) return c.json({ error: "price_usd like $0.05 required" }, 400);
 
     const seller = await env.REGISTRY.prepare(`SELECT id FROM sellers WHERE id = ?1`).bind(sellerId).first();
@@ -199,6 +256,8 @@ export async function dynamicServiceDescriptors(env: RegistryBindings): Promise<
      FROM listings l JOIN sellers s ON s.id = l.seller_id WHERE l.live = 1
      ORDER BY l.promoted DESC, l.created_at ASC LIMIT 500`,
   ).all<{ seller_id: string; service_id: string; method: string; price_usd: string; description: string; promoted: number }>();
+  const network = resolveNetwork(env);
+  const usdc = usdcAddress(network);
   return rows.results.map((l) => {
     const dollars = Number(l.price_usd.replace("$", ""));
     // 6-decimal USDC base units, integer string (M2M/1 §2.3)
@@ -210,7 +269,7 @@ export async function dynamicServiceDescriptors(env: RegistryBindings): Promise<
       description: l.description || `Third-party listing (paid direct to seller wallet).`,
       endpoint: `/s/${l.seller_id}/${l.service_id}`,
       method: l.method as ServiceDescriptor["method"],
-      pricing: { mode: "static" as const, price: { amount: units, asset: USDC_BASE_SEPOLIA, network: NETWORK } },
+      pricing: { mode: "static" as const, price: { amount: units, asset: usdc, network } },
     };
   });
 }
@@ -235,14 +294,17 @@ export function createSellerProxy(env: RegistryBindings) {
     if (!listing) {
       return c.json({ m2mVersion: M2M_VERSION, error: { code: "SERVICE_NOT_FOUND", message: "unknown listing", retryable: false } }, 404);
     }
+    if (!upstreamAllowed(listing.upstream_url)) {
+      return c.json({ m2mVersion: M2M_VERSION, error: { code: "INVALID_MESSAGE", message: "upstream target not allowed", retryable: false } }, 400);
+    }
 
     // Build a per-listing x402 paywall with the seller's wallet as payTo.
     const sub = new Hono();
     const price = listing.price_usd.startsWith("$") ? listing.price_usd : `$${listing.price_usd}`;
     sub.use("*", paymentMiddleware(
       listing.wallet as Address,
-      { [`/s/${sellerId}/${serviceId}`]: { price, network: NETWORK, config: { description: `${sellerId}/${serviceId} via m2m-exchange` } } },
-      env.FACILITATOR_URL ? { url: env.FACILITATOR_URL as Resource } : undefined,
+      { [`/s/${sellerId}/${serviceId}`]: { price, network: resolveNetwork(env), config: { description: `${sellerId}/${serviceId} via m2m-exchange` } } },
+      resolveFacilitator(env),
     ));
     sub.all("*", async (c2: any) => {
       // Payment settled (middleware passed) — proxy to the seller's upstream.
