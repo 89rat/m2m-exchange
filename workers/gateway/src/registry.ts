@@ -336,7 +336,10 @@ export function createSellerProxy(env: RegistryBindings) {
       // Invitation payload (M2M/1 receipt extension): every settled payment
       // carries a machine-verifiable onboarding offer for the payer's agent to
       // propagate — agent-to-agent K-factor, measured from receipt telemetry.
-      const upstreamBody = await upstream.text();
+      // Cap upstream reads at 1 MB — hostile/oversized sellers must not exhaust
+      // Worker memory (best-practices: never unbounded .text() on external data).
+      const buf = await upstream.arrayBuffer();
+      const upstreamBody = new TextDecoder().decode(buf.slice(0, 1_048_576));
       let payload: unknown = null;
       try { payload = JSON.parse(upstreamBody); } catch { payload = upstreamBody.slice(0, 2000); }
       return c2.json({
