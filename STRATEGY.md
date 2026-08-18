@@ -23,7 +23,7 @@ Mainnet gate passed (hardware keys, screening, legal opinion), first real dollar
 **H3 — Two-sided (month 4–8).**
 Self-serve seller onboarding, dynamic per-seller payTo, invoice take-rate live, invitation payloads in receipts, 5+ third-party sellers, one framework integration conversation landed. *Metric: K-factor rising toward 1; sellers who found us without us.*
 
-**H4 — The moat (month 8–14).**
+**H4 — The moat (month 8–14).** *(Note: x402 now defines an official  scheme — P2 aligns with/references it rather than inventing a parallel model.)*
 Netting ledger live (gas costs collapse → we undercut everyone), reputation graph productized (agent credit scores), splitter contract automating fees. *Metric: gas/call down 80%; enterprises paying for compliance tier.*
 
 **H5 — The standard (year 2+).**
