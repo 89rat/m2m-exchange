@@ -1,0 +1,17 @@
+[project]
+name = "x402-pay-call"
+version = "0.1.0"
+description = "pay_and_call for AI agents: search the Atlas index of machine-payable APIs, gate the purchase through a deterministic policy check, then pay via x402 (HTTP 402 / EIP-3009 USDC)."
+requires-python = ">=3.10"
+dependencies = ["httpx>=0.27"]
+
+[project.urls]
+Homepage = "https://atlas.code402.dev"
+Repository = "https://github.com/89rat/m2m-exchange"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["x402_pay_call*"]
