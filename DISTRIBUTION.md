@@ -31,6 +31,27 @@ ecosystem's #1 failure mode is graveyard indexes).
 | **ERC-8004 identity registry** | On-chain registration of the agent/service identity (gas + the operating wallet signs). Worth doing for standards presence; reputation entries there are Sybil-swamped, so treat as identity only. | 🔑 post-mainnet |
 | **Companies-House-anchored operator identity** | Already shipped: JUANA LIMITED in the landing footer + machine `operator` field in x402.json — the KYA signal crawlers and enterprises actually check. | 🤖 done |
 
+## Tier 3b — agent-framework tool hubs (orchestrators pick defaults here)
+
+| Surface | How listing works | Who/when |
+|---|---|---|
+| **Composio** | Open-source tool spec built from our OpenAPI 3.1 manifest (`GET /openapi.json`, live in code). Submit the integration once the gateway is on mainnet. | 🖱 post-mainnet |
+| **Coinbase AgentKit action provider** | Publish a small `@code402/agentkit` action-provider package wrapping list→probe→pay against the gateway. Real engineering (~1–2 days); queue after T6. | 🔑 npm token |
+| **LangChain community / CrewAI tools / LlamaHub** | Community-package submissions built on packages/agent-tools (LangChain/CrewAI wiring already documented there). Heavier review cycles; start after first live sellers exist so examples are real. | 🖱🔑 month 2 |
+| **x402 ecosystem showcase (coinbase/x402 repo)** | PR adding code402 to the open ecosystem directory in the protocol repo. | 🖱 post-deploy |
+
+## Vetted-out (for now) — honesty rules
+
+- **A2A Agent Card (`/.well-known/agent-card.json`)**: NOT served yet, on
+  purpose — a card advertises an A2A transport we don't implement, and a
+  fake capability listing is exactly the graveyard pattern atlas punishes.
+  Revisit if/when an A2A adapter ships.
+- **`smithery.yaml`**: added at submission time with the real deployed URL,
+  not before (same rule: no manifests pointing at nothing).
+- **Sahara AI index, Olas/Autonolas service NFTs, Virtuals/Wayfinder**:
+  unverified fit for an HTTP API gateway; park until a concrete integration
+  path with observable agent traffic exists. Measure-first rule applies.
+
 ## Tier 4 — developer-channel packages (devs find rails here)
 
 | Surface | How listing works | Who/when |

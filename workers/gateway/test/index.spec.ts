@@ -305,6 +305,19 @@ describe("m2m-gateway", () => {
     expect(bad.status).toBe(403);
   });
 
+  // ---- OpenAPI integration manifest ----
+
+  it("GET /openapi.json serves a valid OpenAPI 3.1 manifest with paid + free routes", async () => {
+    const res = await SELF.fetch("http://example.com/openapi.json");
+    expect(res.status).toBe(200);
+    const spec = (await res.json()) as { openapi: string; paths: Record<string, unknown>; info: { title: string } };
+    expect(spec.openapi).toBe("3.1.0");
+    expect(spec.info.title).toBe("code402 gateway");
+    for (const p of ["/v1/services", "/v1/stats", "/v1/sellers", "/api/weather", "/s/{sellerId}/{serviceId}"]) {
+      expect(spec.paths[p]).toBeDefined();
+    }
+  });
+
   // ---- Platform stats: public flywheel telemetry (LOOPS.md T3) ----
 
   it("GET /v1/stats aggregates receipts into public platform telemetry", async () => {

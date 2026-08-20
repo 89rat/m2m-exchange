@@ -156,6 +156,13 @@ export function createApp(env: Bindings) {
   app.route("/", prepaidApp(env));
   app.all("/s/:sellerId/:serviceId", createSellerProxy(env));
 
+  // OpenAPI 3.1 — the integration manifest tool hubs parse (free).
+  app.get("/openapi.json", async (c) => {
+    const { openApiSpec } = await import("./openapi");
+    c.header("cache-control", "public, max-age=3600");
+    return c.json(openApiSpec("https://gateway.code402.dev"));
+  });
+
   // Self-manifest so x402-native crawlers (incl. Coinbase Bazaar) find us.
   app.get("/.well-known/x402.json", (c) =>
     c.json({
@@ -163,6 +170,8 @@ export function createApp(env: Bindings) {
       description: "Open M2M/1 commerce protocol gateway: sell any API to AI agents, per-call x402 USDC, non-custodial, prepaid credits, multi-tenant marketplace.",
       services: "/v1/services",
       sellers_api: "/v1/sellers",
+      openapi: "/openapi.json",
+      stats: "/v1/stats",
       protocol: "M2M/1 + M2M/1.1 rails",
       discovery_index: "https://atlas.code402.dev",
       directory: "https://atlas.code402.dev/directory.md",
