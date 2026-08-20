@@ -73,3 +73,6 @@ attach a route on the atlas zone/worker and update `workers/mcp/server.json`
 Each worker is independent. `npx wrangler rollback` (or redeploy the previous
 commit) reverts one worker without touching the others. Removing the landing
 route returns the root domain to whatever served it before.
+
+
+Go-live trigger: Workers Builds connected for m2m-gateway and code402-mcp (root /, branch claude/x402-raw-materials-pditgf) — this commit fires their first Git deploys. 2026-08-20.
