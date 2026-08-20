@@ -1,0 +1,15 @@
+#:schema node_modules/wrangler/config-schema.json
+name = "code402-landing"
+main = "src/index.ts"
+compatibility_date = "2026-08-11"
+compatibility_flags = ["nodejs_compat"]
+
+[observability]
+enabled = true
+
+# DEPLOY DECISION: attaching this route takes over the code402.dev root from
+# whatever currently serves it. Uncomment only when ready to switch the root
+# site to this worker, then `wrangler deploy`.
+# routes = [
+#   { pattern = "code402.dev", custom_domain = true },
+# ]
