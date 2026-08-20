@@ -1,0 +1,17 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-09-29/server.schema.json",
+  "name": "io.github.89rat/code402",
+  "description": "Discover machine-payable APIs on the code402/x402 gateway, probe x402 payment terms, and run seller operations (register, list, analytics, invoices). Non-custodial: no tool touches funds or keys.",
+  "version": "1.0.0",
+  "websiteUrl": "https://code402.dev",
+  "repository": {
+    "url": "https://github.com/89rat/m2m-exchange",
+    "source": "github"
+  },
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://mcp.code402.dev/mcp"
+    }
+  ]
+}
