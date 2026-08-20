@@ -222,6 +222,11 @@ curl ${GATEWAY}/v1/sellers/acme/invoice     # settled receipts × your tier's fe
       <ul><li>Everything in Free</li><li>Lower take-rate from the first call</li><li>Priority placement eligibility</li></ul>
     </div>
     <div class="tier">
+      <h3>Concierge launch</h3>
+      <div class="rate">$750<small> one-time</small></div>
+      <ul><li>Your API agent-payable in one week, done for you</li><li>Listing, verification, MCP exposure, verified badge</li><li>First paid agent call, receipts walkthrough</li></ul>
+    </div>
+    <div class="tier">
       <h3>Enterprise</h3>
       <div class="rate">Custom</div>
       <ul><li>Counterparty screening posture</li><li>Audit exports + daily reconciliation</li><li>SLA</li></ul>
