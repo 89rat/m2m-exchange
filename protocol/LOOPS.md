@@ -101,6 +101,9 @@ runs out-of-band. Applied to this codebase:
 - [ ] T5: security pass on the branch (free-route rate limits, 402 field
       hygiene audit).
 - [ ] T6: MCP paidTool metadata for dynamic seller listings.
+- [ ] T7: distribution sweep post-deploy — execute DISTRIBUTION.md tiers 1–2
+      (crawl-automatics verification, MCP registry publish, directory
+      submissions); measure each surface via /v1/stats unique payers.
 
 Each tick: retry `git push` (branch `claude/x402-raw-materials-pditgf`),
 advance the topmost unchecked item, run typecheck + tests, commit.
