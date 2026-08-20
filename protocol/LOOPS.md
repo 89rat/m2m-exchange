@@ -111,6 +111,16 @@ runs out-of-band. Applied to this codebase:
       attribution against the platform's OWN take-rate at invoice time
       (never from funds in flight; rebate comes out of our 2%, published
       openly in the 402 terms). Design with T4's idempotency work.
+- [ ] T10: splitter contract design (STRATEGY H4, brought forward) — payTo
+      becomes an on-chain split contract that atomically forwards 98% to the
+      seller and 2% to the platform in the settlement transaction. Custody by
+      code, not by us. FACT CHECK carried into the design: EIP-3009
+      transferWithAuthorization is single-recipient — the atomic split
+      requires the contract as payTo (or a batch/escrow scheme), not a
+      "dual-output authorization". LEGAL FLAG for the mainnet-gate opinion:
+      whether contract-mediated splitting changes the UK
+      licensing/perimeter analysis is a solicitor question, not a fact we
+      assume.
 
 Each tick: retry `git push` (branch `claude/x402-raw-materials-pditgf`),
 advance the topmost unchecked item, run typecheck + tests, commit.

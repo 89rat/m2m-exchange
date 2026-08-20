@@ -63,6 +63,11 @@ $500/mo  =  17 Pro sellers × $29
          or any mix:  29·P + 0.02·G ≥ 500
 ```
 
+Open pricing decision (owner call, not code): Pro is currently $29/mo +
+1.5% take. Alternative worth considering: **$29/mo + 0% take** ("keep 100%
+of your revenue") — a stronger conversion pitch that caps platform upside;
+switch is one line in `scheduleForTier` if chosen.
+
 Reference mixes:
 
 | Pro sellers | GMV needed/mo | Comment |
