@@ -130,6 +130,7 @@ export function landingHtml(): string {
   <span class="brand">code<b>402</b></span>
   <a class="item" href="#sell">Sell</a>
   <a class="item" href="${ATLAS}">Directory</a>
+  <a class="item" href="#standard">Standard</a>
   <a class="item" href="#trust">Trust</a>
   <a class="item" href="${GITHUB}">Protocol</a>
   <span class="spacer"></span>
@@ -229,7 +230,8 @@ curl ${GATEWAY}/v1/sellers/acme/invoice     # settled receipts × your tier's fe
     <div class="tier">
       <h3>Enterprise</h3>
       <div class="rate">Custom</div>
-      <ul><li>Counterparty screening posture</li><li>Audit exports + daily reconciliation</li><li>SLA</li></ul>
+      <ul><li>Counterparty screening posture + audit exports</li><li>Daily receipts-vs-chain reconciliation</li><li>SLA, named operator accountability (UK Ltd)</li></ul>
+      <p style="margin:.6rem 0 0;font-size:.85rem"><a href="mailto:hello@code402.dev">hello@code402.dev</a></p>
     </div>
   </div>
 </section>
@@ -243,6 +245,21 @@ curl ${GATEWAY}/v1/sellers/acme/invoice     # settled receipts × your tier's fe
     <div class="door"><h3>/directory.md + MCP</h3><p>The same directory as agent-readable markdown and an MCP server your agent can query (and pay through) directly.</p><a href="${ATLAS}/directory.md">directory.md →</a></div>
     <div class="door"><h3>GET /v1/services</h3><p>The raw machine storefront on the gateway: M2M/1 ServiceDescriptors with integer-unit USDC pricing.</p><a href="${GATEWAY}/v1/services">v1/services →</a></div>
   </div>
+</section>
+
+<section id="standard">
+  <span class="eyebrow">The engineering standard</span>
+  <h2>Machine money, held to clearing-system discipline</h2>
+  <p class="lede">Six-sigma thinking for the M2M economy: defects prevented by construction, quality measured in public. Every claim below is verifiable in the open source and the live endpoints — none of it is a policy that can quietly change.</p>
+  <div class="laws">
+    <div class="law"><b>Integer money only</b><p>Amounts are integer USDC base units end to end (M2M/1 §2.3). Floating point never touches a money path — a rounding defect is structurally impossible, not merely unlikely.</p></div>
+    <div class="law"><b>Fail closed</b><p>Malformed price configuration or missing mainnet credentials and the worker refuses to boot. A misconfigured gateway cannot quote a wrong price — it cannot quote at all.</p></div>
+    <div class="law"><b>Verify, then serve</b><p>No optimistic delivery before payment verification. Spray-and-drain patterns that exploit optimistic gateways get nothing here.</p></div>
+    <div class="law"><b>Adversarial inputs assumed</b><p>SSRF guards on every seller-supplied URL; payment-header parsing fuzz-tested against hundreds of malformed payloads in CI — a malformed payment never 500s and never passes.</p></div>
+    <div class="law"><b>Uniform terms, always</b><p>The price in a 402 challenge is identical for every caller. No surge pricing, no per-agent discrimination — the probe price always equals the paid price.</p></div>
+    <div class="law"><b>Tested where it runs</b><p>The full suite executes inside the Workers runtime on every commit — the code is proven in the environment it ships to, not a simulator.</p></div>
+  </div>
+  <p class="lede" style="margin-top:1.6rem">Quality is measured, not asserted: live settlement telemetry at <a href="${GATEWAY}/v1/stats">/v1/stats</a>, the machine contract at <a href="${GATEWAY}/openapi.json">/openapi.json</a>, per-call receipts with tx hashes in every paid response, and the <a href="${GITHUB}/blob/main/protocol/ATLAS-VERIFICATION.md">liveness-verification standard</a> we hold our own directory to.</p>
 </section>
 
 <section id="trust">
