@@ -16,14 +16,38 @@ export interface Bindings extends NetworkBindings {
   SELLER_WALLET_ADDRESS: string;
   /** Multi-tenant registry (sellers, listings, receipts). */
   REGISTRY: D1Database;
+  /** Optional dollar-string overrides for first-party tier pricing (LOOPS.md T2). */
+  PRICE_BASIC?: string;
+  PRICE_PREMIUM?: string;
 }
 
-const PRICE_BASIC = "$0.001";
-const PRICE_PREMIUM = "$0.005";
+const DEFAULT_PRICE_BASIC = "$0.001";
+const DEFAULT_PRICE_PREMIUM = "$0.005";
 
-/** USDC base-unit amounts (6 decimals) as integer strings (M2M/1 §2.3). */
-const PRICE_BASE_UNITS = "1000";
-const PRICE_PREMIUM_BASE_UNITS = "5000";
+/**
+ * Resolve first-party tier prices from env (repriceable without a deploy of
+ * code — just a var change) with integer-unit derivation (M2M/1 §2.3).
+ * Malformed config throws: a wrong price is a financial bug, so fail closed
+ * like the mainnet facilitator check rather than silently falling back.
+ */
+export function priceConfig(env: Bindings): {
+  basic: string;
+  premium: string;
+  basicUnits: string;
+  premiumUnits: string;
+} {
+  const norm = (raw: string | undefined, fallback: string, name: string): string => {
+    const v = (raw ?? fallback).trim();
+    if (!/^\$?\d+(\.\d{1,6})?$/.test(v)) {
+      throw new Error(`${name} must be a dollar string like $0.001 (got ${JSON.stringify(raw)})`);
+    }
+    return v.startsWith("$") ? v : `$${v}`;
+  };
+  const toUnits = (p: string): string => BigInt(Math.round(Number(p.replace("$", "")) * 1e6)).toString();
+  const basic = norm(env.PRICE_BASIC, DEFAULT_PRICE_BASIC, "PRICE_BASIC");
+  const premium = norm(env.PRICE_PREMIUM, DEFAULT_PRICE_PREMIUM, "PRICE_PREMIUM");
+  return { basic, premium, basicUnits: toUnits(basic), premiumUnits: toUnits(premium) };
+}
 
 /**
  * M2M/1 §6.1 ServiceDescriptors. Static pricing (§4.2) — these services skip
@@ -33,9 +57,9 @@ const PRICE_PREMIUM_BASE_UNITS = "5000";
 function serviceDescriptors(env: Bindings): ServiceDescriptor[] {
   const network = resolveNetwork(env);
   const usdc = usdcAddress(network);
-  const staticPrice = { amount: PRICE_BASE_UNITS, asset: usdc, network };
-  const premiumPrice = { amount: PRICE_PREMIUM_BASE_UNITS, asset: usdc, network };
-  // Premium tier: $0.005 = 5000 USDC base units (integer string, M2M/1 §2.3).
+  const prices = priceConfig(env);
+  const staticPrice = { amount: prices.basicUnits, asset: usdc, network };
+  const premiumPrice = { amount: prices.premiumUnits, asset: usdc, network };
   return [
     {
       m2mVersion: M2M_VERSION,
@@ -102,6 +126,7 @@ export function createApp(env: Bindings) {
   const app = new Hono<{ Bindings: Bindings }>();
   const network = resolveNetwork(env);
   const facilitator = resolveFacilitator(env);
+  const prices = priceConfig(env); // throws on malformed config (fail closed)
 
   // IndexNow key file + ping endpoint.
   app.get("/gatew2e061f0cc950fd261c3783209b1b913a.txt", (c) => c.text("gatew2e061f0cc950fd261c3783209b1b913a\n"));
@@ -193,8 +218,8 @@ export function createApp(env: Bindings) {
 
   // Prepaid credits: bearer key + sufficient balance = serve + debit (skips x402).
   const firstPartyPrices: Record<string, string> = {
-    "/api/weather": PRICE_BASIC, "/api/echo": PRICE_BASIC,
-    "/api/x402-probe": PRICE_PREMIUM, "/api/vat-check": PRICE_PREMIUM, "/api/forecast": PRICE_PREMIUM,
+    "/api/weather": prices.basic, "/api/echo": prices.basic,
+    "/api/x402-probe": prices.premium, "/api/vat-check": prices.premium, "/api/forecast": prices.premium,
   };
   app.use("/api/*", createPrepaidDebitMiddleware(env, (p) => firstPartyPrices[p] ?? null));
 
@@ -222,29 +247,29 @@ export function createApp(env: Bindings) {
       env.SELLER_WALLET_ADDRESS as Address,
       {
         "/api/weather": {
-          price: PRICE_BASIC,
+          price: prices.basic,
           network,
-          config: { description: "Demo weather reading, paid in USDC on Base Sepolia" },
+          config: { description: "Demo weather reading, paid in USDC" },
         },
         "/api/echo": {
-          price: PRICE_BASIC,
+          price: prices.basic,
           network,
-          config: { description: "Demo echo endpoint, paid in USDC on Base Sepolia" },
+          config: { description: "Demo echo endpoint, paid in USDC" },
         },
         "/api/x402-probe": {
-          price: PRICE_PREMIUM,
+          price: prices.premium,
           network,
-          config: { description: "Probe any URL for a valid x402 paywall, $0.005/call" },
+          config: { description: `Probe any URL for a valid x402 paywall, ${prices.premium}/call` },
         },
         "/api/vat-check": {
-          price: PRICE_PREMIUM,
+          price: prices.premium,
           network,
-          config: { description: "ISO 7064 MOD-97 VAT checksum validation, $0.005/call" },
+          config: { description: `ISO 7064 MOD-97 VAT checksum validation, ${prices.premium}/call` },
         },
         "/api/forecast": {
-          price: PRICE_PREMIUM,
+          price: prices.premium,
           network,
-          config: { description: "5-day forecast, premium tier, $0.005/call" },
+          config: { description: `5-day forecast, premium tier, ${prices.premium}/call` },
         },
       },
       facilitator,
@@ -265,7 +290,7 @@ export function createApp(env: Bindings) {
       txHash = pr.transaction ?? pr.txHash ?? null;
     } catch { /* fields stay null */ }
     const price = c.req.url.includes("/x402-probe") || c.req.url.includes("/vat-check") || c.req.url.includes("/forecast")
-      ? PRICE_PREMIUM : PRICE_BASIC;
+      ? prices.premium : prices.basic;
     // DURABILITY RULE (pre-release audit §7 correction): financial state
     // transitions must NEVER be dropped. Awaited, not waitUntil — a dropped
     // receipt is a compliance violation, not a telemetry loss.

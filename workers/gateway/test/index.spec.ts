@@ -305,6 +305,31 @@ describe("m2m-gateway", () => {
     expect(bad.status).toBe(403);
   });
 
+  // ---- Config-driven pricing (LOOPS.md T2) ----
+
+  it("PRICE_BASIC/PRICE_PREMIUM env overrides flow into 402 challenges and /v1/services", async () => {
+    const { createApp } = await import("../src/index");
+    const { createExecutionContext } = await import("cloudflare:test");
+    const testEnv = { ...env, PRICE_BASIC: "$0.002", PRICE_PREMIUM: "$0.01" };
+    const app = createApp(testEnv);
+
+    const res = await app.fetch(new Request("http://example.com/api/weather"), testEnv, createExecutionContext());
+    expect(res.status).toBe(402);
+    const body = (await res.json()) as PaymentRequiredBody;
+    expect(body.accepts[0]!.maxAmountRequired).toBe("2000"); // $0.002
+
+    const svc = await app.fetch(new Request("http://example.com/v1/services"), testEnv, createExecutionContext());
+    const list = (await svc.json()) as { services: { serviceId: string; pricing: { price: { amount: string } } }[] };
+    expect(list.services.find((s) => s.serviceId === "weather")!.pricing.price.amount).toBe("2000");
+    expect(list.services.find((s) => s.serviceId === "forecast")!.pricing.price.amount).toBe("10000"); // $0.01
+  });
+
+  it("malformed price config fails closed at app construction", async () => {
+    const { createApp } = await import("../src/index");
+    expect(() => createApp({ ...env, PRICE_BASIC: "free" })).toThrow(/PRICE_BASIC/);
+    expect(() => createApp({ ...env, PRICE_PREMIUM: "$0.0000001" })).toThrow(/PRICE_PREMIUM/); // >6 decimals
+  });
+
   // ---- Fuzz: X-402-Payment parser must reject malformed payloads safely (audit §2) ----
 
   it("fuzz: 200 malformed payment headers never 500 and never satisfy payment", async () => {
