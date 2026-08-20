@@ -104,6 +104,13 @@ runs out-of-band. Applied to this codebase:
 - [ ] T7: distribution sweep post-deploy — execute DISTRIBUTION.md tiers 1–2
       (crawl-automatics verification, MCP registry publish, directory
       submissions); measure each surface via /v1/stats unique payers.
+- [ ] T8: `create-x402-app` seller starter (in-repo `examples/` first, npx
+      package after) — transparent code402 defaults per DISTRIBUTION.md
+      tier 3c; every clone is a potential seller.
+- [ ] T9: referral rebates, non-custodial — credit `x-referrer-address`
+      attribution against the platform's OWN take-rate at invoice time
+      (never from funds in flight; rebate comes out of our 2%, published
+      openly in the 402 terms). Design with T4's idempotency work.
 
 Each tick: retry `git push` (branch `claude/x402-raw-materials-pditgf`),
 advance the topmost unchecked item, run typecheck + tests, commit.

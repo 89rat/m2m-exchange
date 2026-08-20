@@ -81,6 +81,7 @@ export function buildServer(env: McpBindings): McpServer {
       title: "List machine-payable services",
       description:
         "List services on the code402 gateway storefront (GET /v1/services): first-party APIs and third-party seller listings, each with method, URL, USDC price, and network. " +
+        "No account or API key exists or is needed anywhere on the gateway — paid services are accountless, priced per call via x402. " +
         "Paying for a service requires an x402-capable HTTP client with the buyer's own wallet — this tool only discovers. " +
         "Returns { total, count, offset, has_more, next_offset?, services: [{ serviceId, name, description, method, url, price, price_usdc_units, network }] }.",
       inputSchema: {
