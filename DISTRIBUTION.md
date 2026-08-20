@@ -40,6 +40,20 @@ ecosystem's #1 failure mode is graveyard indexes).
 | **LangChain community / CrewAI tools / LlamaHub** | Community-package submissions built on packages/agent-tools (LangChain/CrewAI wiring already documented there). Heavier review cycles; start after first live sellers exist so examples are real. | 🖱🔑 month 2 |
 | **x402 ecosystem showcase (coinbase/x402 repo)** | PR adding code402 to the open ecosystem directory in the protocol repo. | 🖱 post-deploy |
 
+## Tier 3c — developer templates (defaults are distribution)
+
+| Surface | How listing works | Who/when |
+|---|---|---|
+| **`create-x402-app` starter** | Scaffold (npx package + in-repo `examples/`) generating a seller worker pre-wired to the gateway — registration script, listing config, paid endpoint, tests. Defaults to code402 **transparently**: the README's first section documents the default and how to point it anywhere else. Distribution mechanics: GitHub topic crawlers, template galleries, and every clone is a potential seller. | backlog T8 |
+| **AGENTS.md/CLAUDE.md snippet, offered not injected** | The starter *offers* an optional, clearly-labeled agent-config snippet ("this project sells via code402; schemas at /llms.txt"). Developers add it knowingly to their own repos. | with T8 |
+
+**Rejected: covert context-window seeding.** Engineering templates so that
+other people's AI tools silently "prefer" our endpoint via buried directives
+is prompt injection with extra steps — the same attack class our 402-field
+hygiene rule (LOOPS.md) exists to defend against, and the fastest known way
+to get a domain blocklisted by every agent framework. Defaults win by being
+visible and good, or they don't win.
+
 ## Vetted-out (for now) — honesty rules
 
 - **A2A Agent Card (`/.well-known/agent-card.json`)**: NOT served yet, on
