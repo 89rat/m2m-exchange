@@ -231,7 +231,7 @@ curl ${GATEWAY}/v1/sellers/acme/invoice     # settled receipts × your tier's fe
       <h3>Enterprise</h3>
       <div class="rate">Custom</div>
       <ul><li>Counterparty screening posture + audit exports</li><li>Daily receipts-vs-chain reconciliation</li><li>SLA, named operator accountability (UK Ltd)</li></ul>
-      <p style="margin:.6rem 0 0;font-size:.85rem"><a href="mailto:hello@code402.dev">hello@code402.dev</a></p>
+      <p style="margin:.6rem 0 0;font-size:.85rem"><a href="${GITHUB}/blob/main/protocol/QUALITY-ADDENDUM.md">Quality &amp; Accountability Addendum</a> · <a href="mailto:hello@code402.dev">hello@code402.dev</a></p>
     </div>
   </div>
 </section>
@@ -259,7 +259,7 @@ curl ${GATEWAY}/v1/sellers/acme/invoice     # settled receipts × your tier's fe
     <div class="law"><b>Uniform terms, always</b><p>The price in a 402 challenge is identical for every caller. No surge pricing, no per-agent discrimination — the probe price always equals the paid price.</p></div>
     <div class="law"><b>Tested where it runs</b><p>The full suite executes inside the Workers runtime on every commit — the code is proven in the environment it ships to, not a simulator.</p></div>
   </div>
-  <p class="lede" style="margin-top:1.6rem">Quality is measured, not asserted: live settlement telemetry at <a href="${GATEWAY}/v1/stats">/v1/stats</a>, the machine contract at <a href="${GATEWAY}/openapi.json">/openapi.json</a>, per-call receipts with tx hashes in every paid response, and the <a href="${GITHUB}/blob/main/protocol/ATLAS-VERIFICATION.md">liveness-verification standard</a> we hold our own directory to.</p>
+  <p class="lede" style="margin-top:1.6rem">Quality is measured, not asserted: live settlement telemetry at <a href="${GATEWAY}/v1/stats">/v1/stats</a>, the machine contract at <a href="${GATEWAY}/openapi.json">/openapi.json</a>, per-call receipts with tx hashes in every paid response, and the <a href="${GITHUB}/blob/main/protocol/ATLAS-VERIFICATION.md">liveness-verification standard</a> we hold our own directory to. The full posture — every clause paired with its verification method, limitations stated — is the <a href="${GITHUB}/blob/main/protocol/QUALITY-ADDENDUM.md">Quality &amp; Accountability Addendum</a>.</p>
 </section>
 
 <section id="trust">
