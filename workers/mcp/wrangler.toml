@@ -1,0 +1,19 @@
+#:schema node_modules/wrangler/config-schema.json
+name = "code402-mcp"
+main = "src/index.ts"
+compatibility_date = "2026-08-11"
+compatibility_flags = ["nodejs_compat"]
+
+[observability]
+enabled = true
+
+# DEPLOY DECISION: the MCP endpoint is advertised as atlas.code402.dev/mcp.
+# Route it either via a custom domain here or a route on the atlas zone once
+# ready — attaching takes over that path, so the flip stays manual.
+# routes = [
+#   { pattern = "mcp.code402.dev", custom_domain = true },
+# ]
+
+[vars]
+# Gateway the MCP tools talk to. Point at a local `wrangler dev` gateway in dev.
+GATEWAY_URL = "https://gateway.code402.dev"
