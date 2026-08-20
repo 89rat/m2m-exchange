@@ -263,9 +263,28 @@ export function registryApp(env: RegistryBindings): Hono<{ Bindings: RegistryBin
     if (!/^0x[0-9a-fA-F]{40}$/.test(wallet)) return c.json({ error: "wallet must be an EVM address" }, 400);
     if (!body.name) return c.json({ error: "name required" }, 400);
 
+    // SECURITY (pre-launch review): the payout wallet is immutable through
+    // this unauthenticated endpoint. Allowing ON CONFLICT to update `wallet`
+    // let anyone repoint an existing seller's revenue with one request.
+    // Same-wallet re-registration stays idempotent (name updates allowed);
+    // wallet re-binding requires proof of the CURRENT wallet via the EIP-191
+    // verify flow (future endpoint) or operator support.
+    const existing = await env.REGISTRY.prepare(`SELECT wallet FROM sellers WHERE id = ?1`)
+      .bind(id).first<{ wallet: string }>();
+    if (existing && existing.wallet !== wallet.toLowerCase()) {
+      return c.json({
+        m2mVersion: M2M_VERSION,
+        error: {
+          code: "WALLET_IMMUTABLE",
+          message: "seller id exists with a different wallet; wallet re-binding requires EIP-191 proof of the registered wallet",
+          retryable: false,
+        },
+      }, 409);
+    }
+
     const r = await env.REGISTRY.prepare(
       `INSERT INTO sellers (id, wallet, name, created_at) VALUES (?1, ?2, ?3, ?4)
-       ON CONFLICT(id) DO UPDATE SET wallet = ?2, name = ?3`,
+       ON CONFLICT(id) DO UPDATE SET name = ?3`,
     ).bind(id, wallet.toLowerCase(), String(body.name).slice(0, 80), Date.now()).run();
 
     return c.json({ m2mVersion: M2M_VERSION, sellerId: id, wallet: wallet.toLowerCase(), storefront: `/s/${id}` }, 201);
