@@ -32,6 +32,13 @@ async function handleMcp(request: Request, env: McpBindings): Promise<Response> 
   if (Array.isArray(message)) {
     return rpcError(null, -32600, "Batch requests are not supported; send one message per POST");
   }
+  // Only client REQUESTS (method + id) and NOTIFICATIONS (method, no id) are
+  // valid inbound. A response-shaped body (id but no method) would register a
+  // waiter the server never resolves — hanging the request — so reject it.
+  const m = message as { method?: string; id?: string | number };
+  if (typeof m.method !== "string") {
+    return rpcError(m.id ?? null, -32600, "Invalid Request: expected a JSON-RPC request or notification (method required)");
+  }
 
   const server = buildServer(env);
   const transport = new WorkersJsonTransport();

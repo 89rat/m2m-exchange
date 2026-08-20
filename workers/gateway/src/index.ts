@@ -3,7 +3,7 @@ import type { Address } from "viem";
 import { paymentMiddleware } from "x402-hono";
 import { M2M_VERSION } from "@m2m/protocol";
 import type { ServiceDescriptor, ServiceList } from "@m2m/protocol";
-import { registryApp, dynamicServiceDescriptors, createSellerProxy } from "./registry";
+import { registryApp, dynamicServiceDescriptors, createSellerProxy, toUnits } from "./registry";
 import { prepaidApp, createPrepaidDebitMiddleware, creditAccount } from "./prepaid";
 import { resolveNetwork, resolveFacilitator, usdcAddress, type NetworkBindings } from "./network";
 
@@ -43,7 +43,6 @@ export function priceConfig(env: Bindings): {
     }
     return v.startsWith("$") ? v : `$${v}`;
   };
-  const toUnits = (p: string): string => BigInt(Math.round(Number(p.replace("$", "")) * 1e6)).toString();
   const basic = norm(env.PRICE_BASIC, DEFAULT_PRICE_BASIC, "PRICE_BASIC");
   const premium = norm(env.PRICE_PREMIUM, DEFAULT_PRICE_PREMIUM, "PRICE_PREMIUM");
   return { basic, premium, basicUnits: toUnits(basic), premiumUnits: toUnits(premium) };
@@ -127,6 +126,31 @@ export function createApp(env: Bindings) {
   const network = resolveNetwork(env);
   const facilitator = resolveFacilitator(env);
   const prices = priceConfig(env); // throws on malformed config (fail closed)
+
+  // CORS for the public, read-only surfaces so the landing page's live-proof
+  // widgets (served from code402.dev) can read them cross-origin. Scoped to
+  // GET on non-sensitive data; the paid /api/* and mutating /v1/sellers POSTs
+  // are agent-to-server (no browser origin) and deliberately excluded.
+  const CORS_PATHS = ["/healthz", "/v1/services", "/v1/stats", "/openapi.json", "/llms.txt", "/.well-known/x402.json"];
+  app.use("*", async (c, next) => {
+    if (c.req.method === "GET" && CORS_PATHS.includes(new URL(c.req.url).pathname)) {
+      c.header("access-control-allow-origin", "*");
+      c.header("access-control-allow-methods", "GET, OPTIONS");
+    }
+    await next();
+  });
+  app.options(
+    "/*",
+    (c) => {
+      if (CORS_PATHS.includes(new URL(c.req.url).pathname)) {
+        return new Response(null, {
+          status: 204,
+          headers: { "access-control-allow-origin": "*", "access-control-allow-methods": "GET, OPTIONS" },
+        });
+      }
+      return c.notFound();
+    },
+  );
 
   // IndexNow key file + ping endpoint.
   app.get("/gatew2e061f0cc950fd261c3783209b1b913a.txt", (c) => c.text("gatew2e061f0cc950fd261c3783209b1b913a\n"));
