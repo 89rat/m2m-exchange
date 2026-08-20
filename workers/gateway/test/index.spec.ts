@@ -134,6 +134,27 @@ describe("m2m-gateway", () => {
     expect(entry!.pricing.price.amount).toBe("50000"); // $0.05 = 50000 base units
   });
 
+  it("seller payout wallet is immutable via the public endpoint (hijack fix)", async () => {
+    // Same wallet: idempotent re-registration succeeds (name update allowed)
+    const same = await SELF.fetch("http://example.com/v1/sellers", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ id: "acme", wallet: "0x1111111111111111111111111111111111111111", name: "ACME Renamed" }),
+    });
+    expect(same.status).toBe(201);
+    // Different wallet: rejected — anyone could otherwise hijack payouts
+    const hijack = await SELF.fetch("http://example.com/v1/sellers", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ id: "acme", wallet: "0x9999999999999999999999999999999999999999", name: "Evil ACME" }),
+    });
+    expect(hijack.status).toBe(409);
+    const body = (await hijack.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("WALLET_IMMUTABLE");
+    // Original wallet still in place
+    const svc = await SELF.fetch("http://example.com/s/acme/holidays");
+    const challenge = (await svc.json()) as PaymentRequiredBody;
+    expect(challenge.accepts[0]!.payTo.toLowerCase()).toBe("0x1111111111111111111111111111111111111111");
+  });
+
   it("dynamic listing 402 challenge pays the SELLER wallet, not the platform", async () => {
     const res = await SELF.fetch("http://example.com/s/acme/holidays");
     expect(res.status).toBe(402);

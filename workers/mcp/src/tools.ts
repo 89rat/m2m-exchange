@@ -221,7 +221,7 @@ export function buildServer(env: McpBindings): McpServer {
     {
       title: "Register a seller",
       description:
-        "Register (or update) a seller on the code402 gateway: POST /v1/sellers with { id, wallet, name }. Payments for the seller's listings settle " +
+        "Register a seller on the code402 gateway (or update its name — the payout wallet is immutable once set; re-binding requires EIP-191 proof): POST /v1/sellers with { id, wallet, name }. Payments for the seller's listings settle " +
         "directly to this wallet (non-custodial). Registration is free; the platform invoices a take-rate on settled receipts (Free tier 2%, Pro 1.5%). " +
         "Returns { sellerId, wallet, storefront }. Prove wallet ownership later via the gateway's EIP-191 verify-challenge flow.",
       inputSchema: {
