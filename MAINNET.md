@@ -38,6 +38,9 @@ buyer's own EIP-3009 signing-adjacent transactions and wallet management.
 - [ ] Verify: CDP dashboard shows the key with x402 facilitator scope
 
 ### 2. Wallet posture
+- Designated platform receiving wallet (JUANA LIMITED):
+  `0x417Da74CDc0D3BabF6AdC851b6E5c638574c0D58` — the payTo in every
+  first-party 402 challenge (testnet now, mainnet after this gate).
 - [ ] Seller/platform receiving wallet moved off the dev box: hardware wallet
       or dedicated account. The gateway never signs (receiving only), but the
       withdrawal key is now worth real money.

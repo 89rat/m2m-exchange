@@ -10,7 +10,7 @@ seller API behind a gateway worker.
 
 **Live deployment (testnet):** https://m2m-gateway.akrivis.workers.dev
 Free probe: `curl https://m2m-gateway.akrivis.workers.dev/healthz`
-Seller wallet (receives test USDC): `0x2CC9237752CFEe65dB46530a958469E7ff12ac6B`
+Seller wallet (receives test USDC): `0x417Da74CDc0D3BabF6AdC851b6E5c638574c0D58`
 Testnet USDC only — no mainnet, no real funds.
 
 ## Architecture

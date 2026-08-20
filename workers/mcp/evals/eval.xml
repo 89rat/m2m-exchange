@@ -38,7 +38,7 @@
   </qa_pair>
   <qa_pair>
     <question>Probe https://gateway.code402.dev/api/vat-check for its x402 payment terms. What payTo address receives the payment?</question>
-    <answer>0x2CC9237752CFEe65dB46530a958469E7ff12ac6B</answer>
+    <answer>0x417Da74CDc0D3BabF6AdC851b6E5c638574c0D58</answer>
   </qa_pair>
   <qa_pair>
     <question>Filter the code402 storefront for services whose name or description contains the word 'demo'. Restricting to first-party /api/ services, how many match?</question>

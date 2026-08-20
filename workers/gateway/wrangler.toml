@@ -24,8 +24,9 @@ routes = [
 
 # Deployed (production-on-testnet) config. The seller wallet is a public
 # receiving address, not a secret, so it lives here as a plain var.
+# JUANA LIMITED operating/receiving wallet (EIP-55 checksummed).
 [vars]
-SELLER_WALLET_ADDRESS = "0x2CC9237752CFEe65dB46530a958469E7ff12ac6B"
+SELLER_WALLET_ADDRESS = "0x417Da74CDc0D3BabF6AdC851b6E5c638574c0D58"
 
 [[d1_databases]]
 binding = "REGISTRY"
