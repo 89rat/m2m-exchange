@@ -7,9 +7,9 @@ compatibility_flags = ["nodejs_compat"]
 [observability]
 enabled = true
 
-# DEPLOY DECISION: attaching this route takes over the code402.dev root from
-# whatever currently serves it. Uncomment only when ready to switch the root
-# site to this worker, then `wrangler deploy`.
-# routes = [
-#   { pattern = "code402.dev", custom_domain = true },
-# ]
+# DEPLOY-ARMED (owner approved go-live): deploying this worker takes over the
+# code402.dev root from whatever currently serves it. Rollback = remove the
+# route or redeploy the previous worker.
+routes = [
+  { pattern = "code402.dev", custom_domain = true },
+]
