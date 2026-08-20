@@ -4,6 +4,11 @@ The platform is mainnet-ready in code. This document is the gate: every box
 must be checked before `NETWORK=base` is deployed. Real money is unforgiving —
 testnet habits leak, and the leak is expensive exactly once.
 
+Operating entity: **JUANA LIMITED**, registered in England & Wales,
+Company No. 14043409 — Unit 7, Edison Building, Electric Wharf, Coventry,
+CV1 4JA, UK. The legal opinion, screening posture, and any money-services
+analysis in this gate are obtained for and in the name of this entity.
+
 ## What the code already does
 
 - `workers/gateway/src/network.ts` is the single network/facilitator switch:

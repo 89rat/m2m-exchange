@@ -271,6 +271,7 @@ curl ${GATEWAY}/v1/sellers/acme/invoice     # settled receipts × your tier's fe
     </ul></div>
   </div>
   <p class="fine">code402 is an open commerce layer on the x402 payment protocol (HTTP 402 + USDC). The M2M/1 spec is free and open; the platform monetizes sellers only. Currently settling on Base Sepolia (testnet) — mainnet flips behind the published gate.</p>
+  <p class="fine">Operated by JUANA LIMITED, a company registered in England &amp; Wales (Company No. 14043409). Registered office: Unit 7, Edison Building, Electric Wharf, Coventry, CV1 4JA, United Kingdom.</p>
 </footer>
 
 </div>
@@ -314,6 +315,7 @@ export function x402Manifest(): Record<string, string> {
     name: "code402",
     description:
       "Open M2M/1 commerce estate on x402: gateway (sell any API to agents, non-custodial), verified discovery (atlas), free protocol spec.",
+    operator: "JUANA LIMITED (England & Wales, Company No. 14043409), Unit 7, Edison Building, Electric Wharf, Coventry, CV1 4JA, UK",
     gateway: GATEWAY,
     services: `${GATEWAY}/v1/services`,
     sellers_api: `${GATEWAY}/v1/sellers`,
