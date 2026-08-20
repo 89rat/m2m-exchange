@@ -57,6 +57,41 @@ runs out-of-band. Applied to this codebase:
    buyer already committed) and must remain factual — pitch, register URL,
    protocol link — never instructions to the reading model.
 
+### Adopted from the Aug-2026 architecture deep-dive (uploads)
+
+- **T11 (queued below): receipts export for reconciliation** — the honest,
+  buildable seed of the "Agent CFO" enterprise layer: `GET
+  /v1/sellers/{id}/receipts.csv` (and later platform-wide for the operator),
+  ERP-ingestible columns, cursorable. Enterprise finance ingests CSVs long
+  before it ingests protocols.
+- **The 403→402 seller pitch** ("answer scrapers with a price, not a block")
+  — seller-consented conversion of their OWN block pages; matches
+  Cloudflare's pay-per-crawl direction. Marketing angle, in SELFSUSTAIN ICP-1.
+- **PLM/engineering verticalization** — founder-domain ICP-0 in SELFSUSTAIN;
+  future first-party demo should be engineering-shaped (unit-conversion /
+  STEP-metadata style), not weather.
+
+### Parked / rejected from the same deep-dive
+
+- **Algorithmic flash credit / "Agent Bank"**: lending is a regulated
+  activity plus balance-sheet risk — violates law #1 and the burn law today.
+  Stays H5 (credit lines on the reputation graph), behind licensing.
+- **Dynamic matching spread**: capturing an *opaque* spread between bid and
+  paid price contradicts the uniform-terms discipline (I.6 of the
+  QUALITY-ADDENDUM). Only ever as a *published* routing fee.
+- **zk-PoE + staking/slashing**: heavy cryptography for a problem our
+  receipts + atlas verification address at current scale; revisit when
+  transaction values justify proofs (research horizon, not roadmap).
+- **"Wrap the top 50 third-party utilities" supply priming**: reselling
+  others' APIs without consent is a ToS/legal minefield and violates the
+  no-deception rule. Wrap only what we own or have permission to resell.
+- **$10K wallet-subsidy blitz / paid hackathons**: breaks the <$500/mo burn
+  law; revisit post-revenue at a scale the P&L supports.
+- **HW/TYPES/FFI "lock-free zero-dependency" compute schema**: wrong
+  abstraction — workerd isolates have no shared-memory concurrency to make
+  lock-free structures meaningful; our runtime-level tests are the real
+  discipline.
+
 ## Rejected (and why)
 
 - **Float yield / "micro-treasury rehypothecation"** (routing customer
@@ -111,6 +146,10 @@ runs out-of-band. Applied to this codebase:
       attribution against the platform's OWN take-rate at invoice time
       (never from funds in flight; rebate comes out of our 2%, published
       openly in the 402 terms). Design with T4's idempotency work.
+- [ ] T11: receipts CSV export — `GET /v1/sellers/{id}/receipts.csv`
+      (ERP-ingestible columns: ts ISO-8601, seller, service, amount, payer,
+      tx hash), cursor/`since` param; the reconciliation seed of the
+      enterprise tier.
 - [ ] T10: splitter contract design (STRATEGY H4, brought forward) — payTo
       becomes an on-chain split contract that atomically forwards 98% to the
       seller and 2% to the platform in the settlement transaction. Custody by
