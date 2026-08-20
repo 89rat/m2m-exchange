@@ -175,7 +175,7 @@ export function createApp(env: Bindings) {
     const svcs = serviceDescriptors(env);
     const lines = [
       "# m2m-exchange gateway",
-      "> Machine-payable APIs on x402 (USDC, Base Sepolia). M2M/1 protocol; discovery at GET /v1/services. Sell your own API: POST /v1/sellers.",
+      "> Machine-payable APIs on x402 (USDC, Base Sepolia). M2M/1 protocol; discovery at GET /v1/services. Sell your own API: POST /v1/sellers. Live platform stats: GET /v1/stats.",
       "> Ecosystem: discovery index https://atlas.code402.dev (209+ services, /directory.md) · settlement layer https://code402.dev",
       "",
       ...svcs.map((s) => `- [${s.name}](https://gateway.code402.dev${s.endpoint}): priced per /v1/services — ${s.description ?? ""}`),

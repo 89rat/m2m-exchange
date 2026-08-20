@@ -120,6 +120,47 @@ export function registryApp(env: RegistryBindings): Hono<{ Bindings: RegistryBin
     });
   });
 
+  // ---- Platform stats: public flywheel telemetry (LOOPS.md T3) ----
+  // Free and cacheable: the live-proof numbers for the landing page, the
+  // SELFSUSTAIN.md scorecard, and (later) atlas ranking. Aggregates only —
+  // no per-payer data beyond a distinct count.
+  app.get("/v1/stats", async (c) => {
+    const totals = await env.REGISTRY.prepare(
+      `SELECT COUNT(*) n, COALESCE(SUM(CAST(REPLACE(amount_usd,'$','') AS REAL)),0) gross,
+              COUNT(DISTINCT payer) payers
+       FROM receipts`,
+    ).first<{ n: number; gross: number; payers: number }>();
+    const since30 = Date.now() - 30 * 86_400_000;
+    const last30 = await env.REGISTRY.prepare(
+      `SELECT COUNT(*) n, COALESCE(SUM(CAST(REPLACE(amount_usd,'$','') AS REAL)),0) gross,
+              COUNT(DISTINCT payer) payers
+       FROM receipts WHERE ts >= ?1`,
+    ).bind(since30).first<{ n: number; gross: number; payers: number }>();
+    const byService = await env.REGISTRY.prepare(
+      `SELECT seller_id, service_id, COUNT(*) calls,
+              COALESCE(SUM(CAST(REPLACE(amount_usd,'$','') AS REAL)),0) gross_usd
+       FROM receipts GROUP BY seller_id, service_id ORDER BY calls DESC LIMIT 20`,
+    ).all();
+    const sellers = await env.REGISTRY.prepare(
+      `SELECT COUNT(*) n, COALESCE(SUM(CASE WHEN tier='pro' THEN 1 ELSE 0 END),0) pro FROM sellers`,
+    ).first<{ n: number; pro: number }>();
+    c.header("cache-control", "public, max-age=60");
+    return c.json({
+      m2mVersion: M2M_VERSION,
+      total_settled_calls: totals?.n ?? 0,
+      gross_usd: Number((totals?.gross ?? 0).toFixed(6)),
+      unique_payers: totals?.payers ?? 0,
+      last_30d: {
+        settled_calls: last30?.n ?? 0,
+        gross_usd: Number((last30?.gross ?? 0).toFixed(6)),
+        unique_payers: last30?.payers ?? 0,
+      },
+      sellers: sellers?.n ?? 0,
+      pro_sellers: sellers?.pro ?? 0,
+      top_services: byService.results,
+    });
+  });
+
   // ---- Seller analytics: own data, free forever ----
   app.get("/v1/sellers/:sellerId/analytics", async (c) => {
     const sellerId = c.req.param("sellerId");

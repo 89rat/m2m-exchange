@@ -92,8 +92,10 @@ runs out-of-band. Applied to this codebase:
       with integer-unit derivation, fail-closed validation, and tests
       (`priceConfig` in workers/gateway/src/index.ts). Reprice via a var
       change + deploy; no code edit.
-- [ ] T3: receipts → per-service telemetry rollup (cold path, cron or
-      on-read aggregation; feeds analytics + future atlas ranking).
+- [x] T3: receipts → platform telemetry — public `GET /v1/stats` (totals,
+      30-day window, unique payers, seller/pro counts, top services;
+      60s cache) wired into the landing live strip and SELFSUSTAIN.md's
+      break-even scorecard.
 - [ ] T4: idempotency-key design note in PROTOCOL.md (§ TBD) for paid
       routes; implementation behind D1.
 - [ ] T5: security pass on the branch (free-route rate limits, 402 field
