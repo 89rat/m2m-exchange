@@ -10,8 +10,8 @@
   ],
   "scripts": {
     "dev": "npm run dev -w @m2m/gateway",
-    "test": "npm run test -w @m2m/gateway && npm run test -w @m2m/protocol && npm run test -w @m2m/landing",
-    "typecheck": "npm run typecheck -w @m2m/gateway && npm run typecheck -w @m2m/buyer && npm run typecheck -w @m2m/protocol && npm run typecheck -w @m2m/landing",
+    "test": "npm run test -w @m2m/gateway && npm run test -w @m2m/protocol && npm run test -w @m2m/landing && npm run test -w @m2m/mcp",
+    "typecheck": "npm run typecheck -w @m2m/gateway && npm run typecheck -w @m2m/buyer && npm run typecheck -w @m2m/protocol && npm run typecheck -w @m2m/landing && npm run typecheck -w @m2m/mcp",
     "buy": "npm run start -w @m2m/buyer"
   },
   "devDependencies": {

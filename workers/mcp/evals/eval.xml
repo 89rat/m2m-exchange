@@ -1,0 +1,51 @@
+<evaluation>
+  <!--
+    Read-only evals for code402-mcp-server, per the mcp-builder skill format.
+    Assumptions (stable while the P0 first-party catalog is deployed):
+    first-party services are the ones whose URL path starts with /api/ —
+    weather ($0.001), echo ($0.001), x402-probe ($0.005), vat-mod97 ($0.005),
+    forecast ($0.005) — settling USDC on base-sepolia to the platform wallet.
+    Third-party /s/{seller}/{service} listings may come and go; questions
+    below are scoped to /api/ services so answers stay stable.
+  -->
+  <qa_pair>
+    <question>Using the code402 storefront, count the first-party services (URL path starting with /api/) that cost $0.005 per call. How many are there?</question>
+    <answer>3</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>What is the cheapest per-call price among the first-party /api/ services on the code402 storefront, expressed in USDC base units (6 decimals)?</question>
+    <answer>1000</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>One first-party service on the code402 storefront validates checksums using ISO 7064 MOD-97-10. What is its serviceId?</question>
+    <answer>vat-mod97</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>Which first-party serviceId on the code402 storefront is described as built for agents that need to verify a payable endpoint before budgeting?</question>
+    <answer>x402-probe</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>In USDC base units, how much more does one call to the code402 'forecast' service cost than one call to the 'weather' service?</question>
+    <answer>4000</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>According to the code402 gateway's health check, which settlement network is currently configured?</question>
+    <answer>base-sepolia</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>Probe https://gateway.code402.dev/api/weather for its x402 payment terms. Which payment scheme do the terms specify?</question>
+    <answer>exact</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>Probe https://gateway.code402.dev/api/vat-check for its x402 payment terms. What payTo address receives the payment?</question>
+    <answer>0x2CC9237752CFEe65dB46530a958469E7ff12ac6B</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>Filter the code402 storefront for services whose name or description contains the word 'demo'. Restricting to first-party /api/ services, how many match?</question>
+    <answer>2</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>What is the total cost in dollars to call each first-party /api/ service on the code402 storefront exactly once?</question>
+    <answer>$0.017</answer>
+  </qa_pair>
+</evaluation>
