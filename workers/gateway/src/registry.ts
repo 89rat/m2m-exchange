@@ -72,7 +72,7 @@ function scheduleForTier(tier: string): FeeSchedule {
 }
 
 /** Dollar string ("$0.05") -> base-unit integer string ("50000"). */
-function toUnits(price: string): string {
+export function toUnits(price: string): string {
   return BigInt(Math.round(Number(price.replace("$", "")) * 1e6)).toString();
 }
 
@@ -282,10 +282,22 @@ export function registryApp(env: RegistryBindings): Hono<{ Bindings: RegistryBin
       }, 409);
     }
 
-    const r = await env.REGISTRY.prepare(
-      `INSERT INTO sellers (id, wallet, name, created_at) VALUES (?1, ?2, ?3, ?4)
-       ON CONFLICT(id) DO UPDATE SET name = ?3`,
-    ).bind(id, wallet.toLowerCase(), String(body.name).slice(0, 80), Date.now()).run();
+    try {
+      await env.REGISTRY.prepare(
+        `INSERT INTO sellers (id, wallet, name, created_at) VALUES (?1, ?2, ?3, ?4)
+         ON CONFLICT(id) DO UPDATE SET name = ?3`,
+      ).bind(id, wallet.toLowerCase(), String(body.name).slice(0, 80), Date.now()).run();
+    } catch (e) {
+      // sellers.wallet is UNIQUE — a wallet already bound to a different id
+      // must surface as a typed 409, not a bare 500.
+      if (String((e as Error)?.message ?? "").toUpperCase().includes("UNIQUE")) {
+        return c.json({
+          m2mVersion: M2M_VERSION,
+          error: { code: "WALLET_IN_USE", message: "this wallet is already registered to another seller id", retryable: false },
+        }, 409);
+      }
+      throw e;
+    }
 
     return c.json({ m2mVersion: M2M_VERSION, sellerId: id, wallet: wallet.toLowerCase(), storefront: `/s/${id}` }, 201);
   });

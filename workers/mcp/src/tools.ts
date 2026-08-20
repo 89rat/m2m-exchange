@@ -166,9 +166,22 @@ export function buildServer(env: McpBindings): McpServer {
         const started = Date.now();
         let res: Response;
         try {
-          res = await fetch(url, { signal: AbortSignal.timeout(10_000) });
+          // redirect:"manual" — the SSRF guard only vetted THIS url; a 3xx to
+          // a private/http target would otherwise bypass it. Report the hop
+          // instead of following it.
+          res = await fetch(url, { redirect: "manual", signal: AbortSignal.timeout(10_000) });
         } catch (e) {
           return ok({ url, reachable: false, isX402: false, error: e instanceof Error ? e.message : "fetch failed" });
+        }
+        if (res.status >= 300 && res.status < 400) {
+          return ok({
+            url,
+            reachable: true,
+            status: res.status,
+            isX402: false,
+            redirectedTo: res.headers.get("location"),
+            note: "endpoint redirects; not followed (re-probe the target URL directly if you trust it)",
+          });
         }
         let terms: Record<string, string | null> | null = null;
         if (res.status === 402) {

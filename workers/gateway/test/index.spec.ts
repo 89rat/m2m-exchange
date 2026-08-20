@@ -326,6 +326,31 @@ describe("m2m-gateway", () => {
     expect(bad.status).toBe(403);
   });
 
+  // ---- CORS on public read surfaces (landing live-proof widgets) ----
+
+  it("public read endpoints send CORS so the landing page can read them cross-origin", async () => {
+    for (const path of ["/healthz", "/v1/services", "/v1/stats", "/openapi.json", "/llms.txt", "/.well-known/x402.json"]) {
+      const res = await SELF.fetch(`http://example.com${path}`);
+      expect(res.headers.get("access-control-allow-origin"), path).toBe("*");
+    }
+    // Preflight is answered
+    const pf = await SELF.fetch("http://example.com/v1/stats", { method: "OPTIONS" });
+    expect(pf.status).toBe(204);
+    expect(pf.headers.get("access-control-allow-origin")).toBe("*");
+    // Paid routes do NOT get the wildcard (agent-to-server, no browser origin)
+    const paid = await SELF.fetch("http://example.com/api/weather");
+    expect(paid.headers.get("access-control-allow-origin")).toBeNull();
+  });
+
+  it("registering a wallet already bound to another seller returns 409 WALLET_IN_USE, not 500", async () => {
+    await SELF.fetch("http://example.com/v1/sellers", { method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ id: "uniqa", wallet: "0x7777777777777777777777777777777777777777", name: "UniqA" }) });
+    const dup = await SELF.fetch("http://example.com/v1/sellers", { method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ id: "uniqb", wallet: "0x7777777777777777777777777777777777777777", name: "UniqB" }) });
+    expect(dup.status).toBe(409);
+    expect(((await dup.json()) as { error: { code: string } }).error.code).toBe("WALLET_IN_USE");
+  });
+
   // ---- OpenAPI integration manifest ----
 
   it("GET /openapi.json serves a valid OpenAPI 3.1 manifest with paid + free routes", async () => {

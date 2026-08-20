@@ -210,6 +210,28 @@ describe("code402 MCP server", () => {
     expect(text).toMatch(/EVM address|wallet/i);
   });
 
+  it("rejects a response-shaped body (id, no method) with -32600 instead of hanging", async () => {
+    const res = await SELF.fetch(MCP_URL, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, result: {} }),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as RpcResponse;
+    expect(body.error?.code).toBe(-32600);
+  });
+
+  it("code402_probe_endpoint reports a redirect without following it (SSRF hop guard)", async () => {
+    routes["redir.example.com/r"] = () =>
+      new Response(null, { status: 302, headers: { location: "http://169.254.169.254/latest/meta-data" } });
+    const result = await callTool("code402_probe_endpoint", { url: "https://redir.example.com/r" });
+    expect(result.isError).toBeFalsy();
+    const body = JSON.parse(result.content[0]!.text) as { isX402: boolean; status: number; redirectedTo: string };
+    expect(body.isX402).toBe(false);
+    expect(body.status).toBe(302);
+    expect(body.redirectedTo).toContain("169.254.169.254");
+  });
+
   it("returns 202 for notifications and 405 for GET", async () => {
     const notif = await SELF.fetch(MCP_URL, {
       method: "POST",
