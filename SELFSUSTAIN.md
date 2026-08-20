@@ -19,6 +19,39 @@ is deliberately out of scope until H3 per law #4.
 | RPC / misc | $0–10/mo | |
 | **Burn ceiling** | **≤ $500/mo (law #4)** | |
 
+## 1b. First 90 days: the $2,500 bridge
+
+Stated goal: **$2,500 of revenue across the first 3 months (~$833/mo), then
+the flywheel takes over.** In the first 90 days of a two-sided marketplace
+starting from zero, neither 29 Pro sellers nor $41K/mo of GMV is realistic —
+so the bridge revenue comes from the asset that already exists: JUANA LIMITED
+is an IT consultancy, and the fastest first dollars are **productized
+launches**, sold around the platform, delivered on it.
+
+**The offer — "Concierge launch" ($750 fixed, one week):** we make your API
+agent-payable end to end: seller registration + EIP-191 verification, listing
+and pricing setup, MCP exposure, atlas Live-verified badge, receipts/invoice
+walkthrough, and a working paid call from a real agent. Zero new code needed —
+every deliverable is a feature that already exists on the gateway.
+
+Routes to $2,500, ranked by probability:
+
+| Route | 90-day realistic | Contribution |
+|---|---|---|
+| A. Concierge launches (3–4 × $750) | 3 closes from ~15 conversations | **$2,250** |
+| B. Pro subscriptions (each launch converts) | 4–8 sellers × $29 × 1–2 mo | $150–450 |
+| C. GMV take-rate (2%) | <$2K GMV in month 3 | <$40 |
+
+A + B clears $2,500 without route C mattering — and every concierge launch
+*is* flywheel fuel: a live seller, a verified listing, stats on the board,
+invitations propagating. The service revenue and the flywheel are the same
+motion.
+
+Milestones: **wk 1** deploy estate + mainnet gate · **wk 2–6** fifteen seller
+conversations (API owners with $1+/call value) · **wk 3–10** deliver 3–4
+launches · **wk 12** review: if `/v1/stats` shows strangers transacting,
+shift weight from services to flywheel; if not, sell 4 more launches.
+
 ## 2. The break-even equation
 
 Revenue streams that exist in code today: 2% take-rate (Free tier),
