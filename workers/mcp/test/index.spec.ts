@@ -150,7 +150,7 @@ describe("code402 MCP server", () => {
               scheme: "exact",
               network: "base-sepolia",
               maxAmountRequired: "5000",
-              payTo: "0x2CC9237752CFEe65dB46530a958469E7ff12ac6B",
+              payTo: "0x417Da74CDc0D3BabF6AdC851b6E5c638574c0D58",
               asset: "0xusdc",
             },
           ],
@@ -166,7 +166,7 @@ describe("code402 MCP server", () => {
     };
     expect(body.isX402).toBe(true);
     expect(body.terms.price).toBe("$0.005");
-    expect(body.terms.payTo).toBe("0x2CC9237752CFEe65dB46530a958469E7ff12ac6B");
+    expect(body.terms.payTo).toBe("0x417Da74CDc0D3BabF6AdC851b6E5c638574c0D58");
   });
 
   it("code402_register_seller posts to the gateway and relays the storefront", async () => {
