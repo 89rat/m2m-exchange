@@ -42,6 +42,23 @@ app.get("/sitemap.xml", (c) => {
   );
 });
 
+// Legacy surfaces preserved across the go-live flip: /trust, /docs, /pricing
+// and the root-level /x402.json stay served by the previous production worker
+// (code402-edge-prod) via its workers.dev subdomain, so existing badge links,
+// citations, and the daily-updated trust record never 404. Port these natively
+// once the trust surface is rebuilt on the new stack.
+const LEGACY = "https://code402-edge-prod.akrivis.workers.dev";
+const LEGACY_PATHS = ["/trust", "/docs", "/pricing", "/x402.json"];
+
+for (const p of LEGACY_PATHS) {
+  const proxy = (c: any) => {
+    const url = new URL(c.req.url);
+    return fetch(LEGACY + url.pathname + url.search, c.req.raw as any);
+  };
+  app.all(p, proxy);
+  app.all(`${p}/*`, proxy);
+}
+
 // Convenience redirects so short human links work from talks/posts.
 app.get("/sell", (c) => c.redirect("https://gateway.code402.dev/v1/sellers", 302));
 app.get("/directory", (c) => c.redirect("https://atlas.code402.dev", 302));

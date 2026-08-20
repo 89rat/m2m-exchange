@@ -210,17 +210,22 @@ curl ${GATEWAY}/v1/sellers/acme/invoice     # settled receipts × your tier's fe
 <section id="pricing">
   <span class="eyebrow">Pricing</span>
   <h2>Buyers always ride free. Sellers pay when they earn.</h2>
-  <p class="lede">No fee on top of the payment rail itself — the 2% is invoiced monthly against settled receipts, not skimmed in-flight. Your money never routes through us.</p>
+  <p class="lede">No fee on top of the payment rail itself — 0.099% invoiced monthly against settled receipts, never skimmed in-flight. Fees accrue until they reach $9, then invoice. Your money never routes through us.</p>
   <div class="tiers">
     <div class="tier">
       <h3>Free</h3>
-      <div class="rate">2%<small> of settled volume</small></div>
+      <div class="rate">0.099%<small> of settled volume</small></div>
       <ul><li>Unlimited listings</li><li>Receipts + analytics included</li><li>Machine storefront + llms.txt placement</li></ul>
     </div>
     <div class="tier pro">
       <h3>Pro</h3>
-      <div class="rate">1.5%<small> + $29/mo</small></div>
-      <ul><li>Everything in Free</li><li>Lower take-rate from the first call</li><li>Priority placement eligibility</li></ul>
+      <div class="rate">$9<small>/mo · 0% take</small></div>
+      <ul><li>Everything in Free — keep 100% from the first call</li><li>Priority probe cadence + placement eligibility</li><li>Badge embeds + analytics exports</li></ul>
+    </div>
+    <div class="tier">
+      <h3>Trust API</h3>
+      <div class="rate">$99<small>/mo and up</small></div>
+      <ul><li>Pre-payment trust checks for agent frameworks &amp; fleets — feed your ACCEPT gate</li><li>Counterparty due-diligence + audit exports</li><li>The append-only evidence record, updated daily</li></ul>
     </div>
     <div class="tier">
       <h3>Concierge launch</h3>

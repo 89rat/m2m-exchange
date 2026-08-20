@@ -4,12 +4,15 @@ main = "src/index.ts"
 compatibility_date = "2026-08-11"
 compatibility_flags = ["nodejs_compat"]
 
-[observability]
-enabled = true
-
 # DEPLOY-ARMED (owner approved go-live): deploying this worker takes over the
 # code402.dev root from whatever currently serves it. Rollback = remove the
 # route or redeploy the previous worker.
+# NOTE: routes must be top-level — placing them after [observability] makes
+# TOML nest them under observability, where wrangler silently ignores them.
 routes = [
   { pattern = "code402.dev", custom_domain = true },
+  { pattern = "www.code402.dev", custom_domain = true },
 ]
+
+[observability]
+enabled = true
