@@ -3,7 +3,7 @@ import type { Address } from "viem";
 import { paymentMiddleware } from "x402-hono";
 import { M2M_VERSION } from "@m2m/protocol";
 import type { ServiceDescriptor, ServiceList } from "@m2m/protocol";
-import { registryApp, dynamicServiceDescriptors, createSellerProxy } from "./registry";
+import { registryApp, dynamicServiceDescriptors, createSellerProxy, toUnits } from "./registry";
 import { prepaidApp, createPrepaidDebitMiddleware, creditAccount } from "./prepaid";
 import { resolveNetwork, resolveFacilitator, usdcAddress, type NetworkBindings } from "./network";
 
@@ -16,14 +16,37 @@ export interface Bindings extends NetworkBindings {
   SELLER_WALLET_ADDRESS: string;
   /** Multi-tenant registry (sellers, listings, receipts). */
   REGISTRY: D1Database;
+  /** Optional dollar-string overrides for first-party tier pricing (LOOPS.md T2). */
+  PRICE_BASIC?: string;
+  PRICE_PREMIUM?: string;
 }
 
-const PRICE_BASIC = "$0.001";
-const PRICE_PREMIUM = "$0.005";
+const DEFAULT_PRICE_BASIC = "$0.001";
+const DEFAULT_PRICE_PREMIUM = "$0.005";
 
-/** USDC base-unit amounts (6 decimals) as integer strings (M2M/1 §2.3). */
-const PRICE_BASE_UNITS = "1000";
-const PRICE_PREMIUM_BASE_UNITS = "5000";
+/**
+ * Resolve first-party tier prices from env (repriceable without a deploy of
+ * code — just a var change) with integer-unit derivation (M2M/1 §2.3).
+ * Malformed config throws: a wrong price is a financial bug, so fail closed
+ * like the mainnet facilitator check rather than silently falling back.
+ */
+export function priceConfig(env: Bindings): {
+  basic: string;
+  premium: string;
+  basicUnits: string;
+  premiumUnits: string;
+} {
+  const norm = (raw: string | undefined, fallback: string, name: string): string => {
+    const v = (raw ?? fallback).trim();
+    if (!/^\$?\d+(\.\d{1,6})?$/.test(v)) {
+      throw new Error(`${name} must be a dollar string like $0.001 (got ${JSON.stringify(raw)})`);
+    }
+    return v.startsWith("$") ? v : `$${v}`;
+  };
+  const basic = norm(env.PRICE_BASIC, DEFAULT_PRICE_BASIC, "PRICE_BASIC");
+  const premium = norm(env.PRICE_PREMIUM, DEFAULT_PRICE_PREMIUM, "PRICE_PREMIUM");
+  return { basic, premium, basicUnits: toUnits(basic), premiumUnits: toUnits(premium) };
+}
 
 /**
  * M2M/1 §6.1 ServiceDescriptors. Static pricing (§4.2) — these services skip
@@ -33,9 +56,9 @@ const PRICE_PREMIUM_BASE_UNITS = "5000";
 function serviceDescriptors(env: Bindings): ServiceDescriptor[] {
   const network = resolveNetwork(env);
   const usdc = usdcAddress(network);
-  const staticPrice = { amount: PRICE_BASE_UNITS, asset: usdc, network };
-  const premiumPrice = { amount: PRICE_PREMIUM_BASE_UNITS, asset: usdc, network };
-  // Premium tier: $0.005 = 5000 USDC base units (integer string, M2M/1 §2.3).
+  const prices = priceConfig(env);
+  const staticPrice = { amount: prices.basicUnits, asset: usdc, network };
+  const premiumPrice = { amount: prices.premiumUnits, asset: usdc, network };
   return [
     {
       m2mVersion: M2M_VERSION,
@@ -102,11 +125,37 @@ export function createApp(env: Bindings) {
   const app = new Hono<{ Bindings: Bindings }>();
   const network = resolveNetwork(env);
   const facilitator = resolveFacilitator(env);
+  const prices = priceConfig(env); // throws on malformed config (fail closed)
+
+  // CORS for the public, read-only surfaces so the landing page's live-proof
+  // widgets (served from code402.dev) can read them cross-origin. Scoped to
+  // GET on non-sensitive data; the paid /api/* and mutating /v1/sellers POSTs
+  // are agent-to-server (no browser origin) and deliberately excluded.
+  const CORS_PATHS = ["/healthz", "/v1/services", "/v1/stats", "/openapi.json", "/llms.txt", "/.well-known/x402.json"];
+  app.use("*", async (c, next) => {
+    if (c.req.method === "GET" && CORS_PATHS.includes(new URL(c.req.url).pathname)) {
+      c.header("access-control-allow-origin", "*");
+      c.header("access-control-allow-methods", "GET, OPTIONS");
+    }
+    await next();
+  });
+  app.options(
+    "/*",
+    (c) => {
+      if (CORS_PATHS.includes(new URL(c.req.url).pathname)) {
+        return new Response(null, {
+          status: 204,
+          headers: { "access-control-allow-origin": "*", "access-control-allow-methods": "GET, OPTIONS" },
+        });
+      }
+      return c.notFound();
+    },
+  );
 
   // IndexNow key file + ping endpoint.
   app.get("/gatew2e061f0cc950fd261c3783209b1b913a.txt", (c) => c.text("gatew2e061f0cc950fd261c3783209b1b913a\n"));
   app.get("/admin/indexnow", async (c) => {
-    const urls = ["https://gateway.code402.dev/", "https://gateway.code402.dev/v1/services", "https://gateway.code402.dev/llms.txt"];
+    const urls = ["https://gateway.code402.dev/", "https://gateway.code402.dev/v1/services", "https://gateway.code402.dev/v1/stats", "https://gateway.code402.dev/llms.txt", "https://gateway.code402.dev/.well-known/x402.json"];
     const res = await fetch("https://api.indexnow.org/indexnow", {
       method: "POST", headers: { "content-type": "application/json" },
       body: JSON.stringify({ host: "gateway.code402.dev", key: "gatew2e061f0cc950fd261c3783209b1b913a", keyLocation: "https://gateway.code402.dev/gatew2e061f0cc950fd261c3783209b1b913a.txt", urlList: urls }),
@@ -131,6 +180,13 @@ export function createApp(env: Bindings) {
   app.route("/", prepaidApp(env));
   app.all("/s/:sellerId/:serviceId", createSellerProxy(env));
 
+  // OpenAPI 3.1 — the integration manifest tool hubs parse (free).
+  app.get("/openapi.json", async (c) => {
+    const { openApiSpec } = await import("./openapi");
+    c.header("cache-control", "public, max-age=3600");
+    return c.json(openApiSpec("https://gateway.code402.dev"));
+  });
+
   // Self-manifest so x402-native crawlers (incl. Coinbase Bazaar) find us.
   app.get("/.well-known/x402.json", (c) =>
     c.json({
@@ -138,6 +194,8 @@ export function createApp(env: Bindings) {
       description: "Open M2M/1 commerce protocol gateway: sell any API to AI agents, per-call x402 USDC, non-custodial, prepaid credits, multi-tenant marketplace.",
       services: "/v1/services",
       sellers_api: "/v1/sellers",
+      openapi: "/openapi.json",
+      stats: "/v1/stats",
       protocol: "M2M/1 + M2M/1.1 rails",
       discovery_index: "https://atlas.code402.dev",
       directory: "https://atlas.code402.dev/directory.md",
@@ -150,7 +208,7 @@ export function createApp(env: Bindings) {
     const svcs = serviceDescriptors(env);
     const lines = [
       "# m2m-exchange gateway",
-      "> Machine-payable APIs on x402 (USDC, Base Sepolia). M2M/1 protocol; discovery at GET /v1/services. Sell your own API: POST /v1/sellers.",
+      "> Machine-payable APIs on x402 (USDC, Base Sepolia). M2M/1 protocol; discovery at GET /v1/services. Sell your own API: POST /v1/sellers. Live platform stats: GET /v1/stats.",
       "> Ecosystem: discovery index https://atlas.code402.dev (209+ services, /directory.md) · settlement layer https://code402.dev",
       "",
       ...svcs.map((s) => `- [${s.name}](https://gateway.code402.dev${s.endpoint}): priced per /v1/services — ${s.description ?? ""}`),
@@ -193,8 +251,8 @@ export function createApp(env: Bindings) {
 
   // Prepaid credits: bearer key + sufficient balance = serve + debit (skips x402).
   const firstPartyPrices: Record<string, string> = {
-    "/api/weather": PRICE_BASIC, "/api/echo": PRICE_BASIC,
-    "/api/x402-probe": PRICE_PREMIUM, "/api/vat-check": PRICE_PREMIUM, "/api/forecast": PRICE_PREMIUM,
+    "/api/weather": prices.basic, "/api/echo": prices.basic,
+    "/api/x402-probe": prices.premium, "/api/vat-check": prices.premium, "/api/forecast": prices.premium,
   };
   app.use("/api/*", createPrepaidDebitMiddleware(env, (p) => firstPartyPrices[p] ?? null));
 
@@ -222,29 +280,29 @@ export function createApp(env: Bindings) {
       env.SELLER_WALLET_ADDRESS as Address,
       {
         "/api/weather": {
-          price: PRICE_BASIC,
+          price: prices.basic,
           network,
-          config: { description: "Demo weather reading, paid in USDC on Base Sepolia" },
+          config: { description: "Demo weather reading, paid in USDC" },
         },
         "/api/echo": {
-          price: PRICE_BASIC,
+          price: prices.basic,
           network,
-          config: { description: "Demo echo endpoint, paid in USDC on Base Sepolia" },
+          config: { description: "Demo echo endpoint, paid in USDC" },
         },
         "/api/x402-probe": {
-          price: PRICE_PREMIUM,
+          price: prices.premium,
           network,
-          config: { description: "Probe any URL for a valid x402 paywall, $0.005/call" },
+          config: { description: `Probe any URL for a valid x402 paywall, ${prices.premium}/call` },
         },
         "/api/vat-check": {
-          price: PRICE_PREMIUM,
+          price: prices.premium,
           network,
-          config: { description: "ISO 7064 MOD-97 VAT checksum validation, $0.005/call" },
+          config: { description: `ISO 7064 MOD-97 VAT checksum validation, ${prices.premium}/call` },
         },
         "/api/forecast": {
-          price: PRICE_PREMIUM,
+          price: prices.premium,
           network,
-          config: { description: "5-day forecast, premium tier, $0.005/call" },
+          config: { description: `5-day forecast, premium tier, ${prices.premium}/call` },
         },
       },
       facilitator,
@@ -265,7 +323,7 @@ export function createApp(env: Bindings) {
       txHash = pr.transaction ?? pr.txHash ?? null;
     } catch { /* fields stay null */ }
     const price = c.req.url.includes("/x402-probe") || c.req.url.includes("/vat-check") || c.req.url.includes("/forecast")
-      ? PRICE_PREMIUM : PRICE_BASIC;
+      ? prices.premium : prices.basic;
     // DURABILITY RULE (pre-release audit §7 correction): financial state
     // transitions must NEVER be dropped. Awaited, not waitUntil — a dropped
     // receipt is a compliance violation, not a telemetry loss.

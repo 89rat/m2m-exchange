@@ -134,6 +134,27 @@ describe("m2m-gateway", () => {
     expect(entry!.pricing.price.amount).toBe("50000"); // $0.05 = 50000 base units
   });
 
+  it("seller payout wallet is immutable via the public endpoint (hijack fix)", async () => {
+    // Same wallet: idempotent re-registration succeeds (name update allowed)
+    const same = await SELF.fetch("http://example.com/v1/sellers", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ id: "acme", wallet: "0x1111111111111111111111111111111111111111", name: "ACME Renamed" }),
+    });
+    expect(same.status).toBe(201);
+    // Different wallet: rejected — anyone could otherwise hijack payouts
+    const hijack = await SELF.fetch("http://example.com/v1/sellers", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ id: "acme", wallet: "0x9999999999999999999999999999999999999999", name: "Evil ACME" }),
+    });
+    expect(hijack.status).toBe(409);
+    const body = (await hijack.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("WALLET_IMMUTABLE");
+    // Original wallet still in place
+    const svc = await SELF.fetch("http://example.com/s/acme/holidays");
+    const challenge = (await svc.json()) as PaymentRequiredBody;
+    expect(challenge.accepts[0]!.payTo.toLowerCase()).toBe("0x1111111111111111111111111111111111111111");
+  });
+
   it("dynamic listing 402 challenge pays the SELLER wallet, not the platform", async () => {
     const res = await SELF.fetch("http://example.com/s/acme/holidays");
     expect(res.status).toBe(402);
@@ -303,6 +324,97 @@ describe("m2m-gateway", () => {
       body: JSON.stringify({ signature: await other.signMessage({ message: m2 }) }),
     });
     expect(bad.status).toBe(403);
+  });
+
+  // ---- CORS on public read surfaces (landing live-proof widgets) ----
+
+  it("public read endpoints send CORS so the landing page can read them cross-origin", async () => {
+    for (const path of ["/healthz", "/v1/services", "/v1/stats", "/openapi.json", "/llms.txt", "/.well-known/x402.json"]) {
+      const res = await SELF.fetch(`http://example.com${path}`);
+      expect(res.headers.get("access-control-allow-origin"), path).toBe("*");
+    }
+    // Preflight is answered
+    const pf = await SELF.fetch("http://example.com/v1/stats", { method: "OPTIONS" });
+    expect(pf.status).toBe(204);
+    expect(pf.headers.get("access-control-allow-origin")).toBe("*");
+    // Paid routes do NOT get the wildcard (agent-to-server, no browser origin)
+    const paid = await SELF.fetch("http://example.com/api/weather");
+    expect(paid.headers.get("access-control-allow-origin")).toBeNull();
+  });
+
+  it("registering a wallet already bound to another seller returns 409 WALLET_IN_USE, not 500", async () => {
+    await SELF.fetch("http://example.com/v1/sellers", { method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ id: "uniqa", wallet: "0x7777777777777777777777777777777777777777", name: "UniqA" }) });
+    const dup = await SELF.fetch("http://example.com/v1/sellers", { method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ id: "uniqb", wallet: "0x7777777777777777777777777777777777777777", name: "UniqB" }) });
+    expect(dup.status).toBe(409);
+    expect(((await dup.json()) as { error: { code: string } }).error.code).toBe("WALLET_IN_USE");
+  });
+
+  // ---- OpenAPI integration manifest ----
+
+  it("GET /openapi.json serves a valid OpenAPI 3.1 manifest with paid + free routes", async () => {
+    const res = await SELF.fetch("http://example.com/openapi.json");
+    expect(res.status).toBe(200);
+    const spec = (await res.json()) as { openapi: string; paths: Record<string, unknown>; info: { title: string } };
+    expect(spec.openapi).toBe("3.1.0");
+    expect(spec.info.title).toBe("code402 gateway");
+    for (const p of ["/v1/services", "/v1/stats", "/v1/sellers", "/api/weather", "/s/{sellerId}/{serviceId}"]) {
+      expect(spec.paths[p]).toBeDefined();
+    }
+  });
+
+  // ---- Platform stats: public flywheel telemetry (LOOPS.md T3) ----
+
+  it("GET /v1/stats aggregates receipts into public platform telemetry", async () => {
+    await SELF.fetch("http://example.com/v1/sellers", { method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ id: "statsco", wallet: "0x4444444444444444444444444444444444444444", name: "StatsCo" }) });
+    await env.REGISTRY.prepare(
+      `INSERT INTO receipts (ts, seller_id, service_id, amount_usd, payer) VALUES
+       (?1,'statsco','alpha','$0.10','0xpayer1'),(?1,'statsco','alpha','$0.10','0xpayer2'),(?1,'statsco','beta','$1.00','0xpayer1')`,
+    ).bind(Date.now()).run();
+
+    const res = await SELF.fetch("http://example.com/v1/stats");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("cache-control")).toContain("max-age=60");
+    const s = (await res.json()) as {
+      total_settled_calls: number; gross_usd: number; unique_payers: number;
+      last_30d: { settled_calls: number }; sellers: number;
+      top_services: { seller_id: string; service_id: string; calls: number; gross_usd: number }[];
+    };
+    expect(s.total_settled_calls).toBeGreaterThanOrEqual(3);
+    expect(s.unique_payers).toBeGreaterThanOrEqual(2);
+    expect(s.last_30d.settled_calls).toBeGreaterThanOrEqual(3);
+    expect(s.sellers).toBeGreaterThanOrEqual(1);
+    const alpha = s.top_services.find((t) => t.seller_id === "statsco" && t.service_id === "alpha");
+    expect(alpha).toBeDefined();
+    expect(alpha!.calls).toBe(2);
+    expect(alpha!.gross_usd).toBeCloseTo(0.2, 6);
+  });
+
+  // ---- Config-driven pricing (LOOPS.md T2) ----
+
+  it("PRICE_BASIC/PRICE_PREMIUM env overrides flow into 402 challenges and /v1/services", async () => {
+    const { createApp } = await import("../src/index");
+    const { createExecutionContext } = await import("cloudflare:test");
+    const testEnv = { ...env, PRICE_BASIC: "$0.002", PRICE_PREMIUM: "$0.01" };
+    const app = createApp(testEnv);
+
+    const res = await app.fetch(new Request("http://example.com/api/weather"), testEnv, createExecutionContext());
+    expect(res.status).toBe(402);
+    const body = (await res.json()) as PaymentRequiredBody;
+    expect(body.accepts[0]!.maxAmountRequired).toBe("2000"); // $0.002
+
+    const svc = await app.fetch(new Request("http://example.com/v1/services"), testEnv, createExecutionContext());
+    const list = (await svc.json()) as { services: { serviceId: string; pricing: { price: { amount: string } } }[] };
+    expect(list.services.find((s) => s.serviceId === "weather")!.pricing.price.amount).toBe("2000");
+    expect(list.services.find((s) => s.serviceId === "forecast")!.pricing.price.amount).toBe("10000"); // $0.01
+  });
+
+  it("malformed price config fails closed at app construction", async () => {
+    const { createApp } = await import("../src/index");
+    expect(() => createApp({ ...env, PRICE_BASIC: "free" })).toThrow(/PRICE_BASIC/);
+    expect(() => createApp({ ...env, PRICE_PREMIUM: "$0.0000001" })).toThrow(/PRICE_PREMIUM/); // >6 decimals
   });
 
   // ---- Fuzz: X-402-Payment parser must reject malformed payloads safely (audit §2) ----

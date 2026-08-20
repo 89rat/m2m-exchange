@@ -1,0 +1,19 @@
+#:schema node_modules/wrangler/config-schema.json
+name = "code402-mcp"
+main = "src/index.ts"
+compatibility_date = "2026-08-11"
+compatibility_flags = ["nodejs_compat"]
+
+[observability]
+enabled = true
+
+# DEPLOY-ARMED (owner approved go-live): attaches mcp.code402.dev to this
+# worker. workers/mcp/server.json remotes[0].url must keep matching this host
+# for the MCP-registry submission.
+routes = [
+  { pattern = "mcp.code402.dev", custom_domain = true },
+]
+
+[vars]
+# Gateway the MCP tools talk to. Point at a local `wrangler dev` gateway in dev.
+GATEWAY_URL = "https://gateway.code402.dev"

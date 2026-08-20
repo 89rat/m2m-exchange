@@ -24,8 +24,13 @@ routes = [
 
 # Deployed (production-on-testnet) config. The seller wallet is a public
 # receiving address, not a secret, so it lives here as a plain var.
+# JUANA LIMITED operating/receiving wallet (EIP-55 checksummed).
 [vars]
-SELLER_WALLET_ADDRESS = "0x2CC9237752CFEe65dB46530a958469E7ff12ac6B"
+SELLER_WALLET_ADDRESS = "0x417Da74CDc0D3BabF6AdC851b6E5c638574c0D58"
+# Optional first-party price overrides (dollar strings; malformed values make
+# the worker fail closed). Defaults: basic $0.001, premium $0.005.
+# PRICE_BASIC = "$0.001"
+# PRICE_PREMIUM = "$0.005"
 
 [[d1_databases]]
 binding = "REGISTRY"

@@ -72,7 +72,7 @@ function scheduleForTier(tier: string): FeeSchedule {
 }
 
 /** Dollar string ("$0.05") -> base-unit integer string ("50000"). */
-function toUnits(price: string): string {
+export function toUnits(price: string): string {
   return BigInt(Math.round(Number(price.replace("$", "")) * 1e6)).toString();
 }
 
@@ -117,6 +117,47 @@ export function registryApp(env: RegistryBindings): Hono<{ Bindings: RegistryBin
       fee_bps: schedule.feeBps,
       payment: "payable via x402 to the platform fee wallet (settles invoice)",
       note: "Invoice model: fee invoiced monthly against settled receipts. Splitter contract planned.",
+    });
+  });
+
+  // ---- Platform stats: public flywheel telemetry (LOOPS.md T3) ----
+  // Free and cacheable: the live-proof numbers for the landing page, the
+  // SELFSUSTAIN.md scorecard, and (later) atlas ranking. Aggregates only —
+  // no per-payer data beyond a distinct count.
+  app.get("/v1/stats", async (c) => {
+    const totals = await env.REGISTRY.prepare(
+      `SELECT COUNT(*) n, COALESCE(SUM(CAST(REPLACE(amount_usd,'$','') AS REAL)),0) gross,
+              COUNT(DISTINCT payer) payers
+       FROM receipts`,
+    ).first<{ n: number; gross: number; payers: number }>();
+    const since30 = Date.now() - 30 * 86_400_000;
+    const last30 = await env.REGISTRY.prepare(
+      `SELECT COUNT(*) n, COALESCE(SUM(CAST(REPLACE(amount_usd,'$','') AS REAL)),0) gross,
+              COUNT(DISTINCT payer) payers
+       FROM receipts WHERE ts >= ?1`,
+    ).bind(since30).first<{ n: number; gross: number; payers: number }>();
+    const byService = await env.REGISTRY.prepare(
+      `SELECT seller_id, service_id, COUNT(*) calls,
+              COALESCE(SUM(CAST(REPLACE(amount_usd,'$','') AS REAL)),0) gross_usd
+       FROM receipts GROUP BY seller_id, service_id ORDER BY calls DESC LIMIT 20`,
+    ).all();
+    const sellers = await env.REGISTRY.prepare(
+      `SELECT COUNT(*) n, COALESCE(SUM(CASE WHEN tier='pro' THEN 1 ELSE 0 END),0) pro FROM sellers`,
+    ).first<{ n: number; pro: number }>();
+    c.header("cache-control", "public, max-age=60");
+    return c.json({
+      m2mVersion: M2M_VERSION,
+      total_settled_calls: totals?.n ?? 0,
+      gross_usd: Number((totals?.gross ?? 0).toFixed(6)),
+      unique_payers: totals?.payers ?? 0,
+      last_30d: {
+        settled_calls: last30?.n ?? 0,
+        gross_usd: Number((last30?.gross ?? 0).toFixed(6)),
+        unique_payers: last30?.payers ?? 0,
+      },
+      sellers: sellers?.n ?? 0,
+      pro_sellers: sellers?.pro ?? 0,
+      top_services: byService.results,
     });
   });
 
@@ -222,10 +263,41 @@ export function registryApp(env: RegistryBindings): Hono<{ Bindings: RegistryBin
     if (!/^0x[0-9a-fA-F]{40}$/.test(wallet)) return c.json({ error: "wallet must be an EVM address" }, 400);
     if (!body.name) return c.json({ error: "name required" }, 400);
 
-    const r = await env.REGISTRY.prepare(
-      `INSERT INTO sellers (id, wallet, name, created_at) VALUES (?1, ?2, ?3, ?4)
-       ON CONFLICT(id) DO UPDATE SET wallet = ?2, name = ?3`,
-    ).bind(id, wallet.toLowerCase(), String(body.name).slice(0, 80), Date.now()).run();
+    // SECURITY (pre-launch review): the payout wallet is immutable through
+    // this unauthenticated endpoint. Allowing ON CONFLICT to update `wallet`
+    // let anyone repoint an existing seller's revenue with one request.
+    // Same-wallet re-registration stays idempotent (name updates allowed);
+    // wallet re-binding requires proof of the CURRENT wallet via the EIP-191
+    // verify flow (future endpoint) or operator support.
+    const existing = await env.REGISTRY.prepare(`SELECT wallet FROM sellers WHERE id = ?1`)
+      .bind(id).first<{ wallet: string }>();
+    if (existing && existing.wallet !== wallet.toLowerCase()) {
+      return c.json({
+        m2mVersion: M2M_VERSION,
+        error: {
+          code: "WALLET_IMMUTABLE",
+          message: "seller id exists with a different wallet; wallet re-binding requires EIP-191 proof of the registered wallet",
+          retryable: false,
+        },
+      }, 409);
+    }
+
+    try {
+      await env.REGISTRY.prepare(
+        `INSERT INTO sellers (id, wallet, name, created_at) VALUES (?1, ?2, ?3, ?4)
+         ON CONFLICT(id) DO UPDATE SET name = ?3`,
+      ).bind(id, wallet.toLowerCase(), String(body.name).slice(0, 80), Date.now()).run();
+    } catch (e) {
+      // sellers.wallet is UNIQUE — a wallet already bound to a different id
+      // must surface as a typed 409, not a bare 500.
+      if (String((e as Error)?.message ?? "").toUpperCase().includes("UNIQUE")) {
+        return c.json({
+          m2mVersion: M2M_VERSION,
+          error: { code: "WALLET_IN_USE", message: "this wallet is already registered to another seller id", retryable: false },
+        }, 409);
+      }
+      throw e;
+    }
 
     return c.json({ m2mVersion: M2M_VERSION, sellerId: id, wallet: wallet.toLowerCase(), storefront: `/s/${id}` }, 201);
   });
