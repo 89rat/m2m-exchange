@@ -48,9 +48,27 @@ invitations propagating. The service revenue and the flywheel are the same
 motion.
 
 Milestones: **wk 1** deploy estate + mainnet gate · **wk 2–6** fifteen seller
-conversations (API owners with $1+/call value) · **wk 3–10** deliver 3–4
-launches · **wk 12** review: if `/v1/stats` shows strangers transacting,
-shift weight from services to flywheel; if not, sell 4 more launches.
+conversations (targeting below) · **wk 3–10** deliver 3–4 launches ·
+**wk 12** review: if `/v1/stats` shows strangers transacting, shift weight
+from services to flywheel; if not, sell 4 more launches.
+
+### Who the fifteen conversations are (ICP targeting)
+
+Lead with **ICP-0 — the founder's own domain**: PLM & engineering-data
+owners. This is where credibility is already earned, and it maps to the
+highest-value calls in the ecosystem:
+
+| ICP | Who | The pitch that lands |
+|---|---|---|
+| **0. PLM / engineering data** (warmest) | PLM catalog owners, CAD/STEP model libraries, FEA/simulation-as-a-service, compliance registries (RoHS/REACH checks) | "Let a design agent buy one certified STEP model or one solver run for $5 — no 12-month license, no PO, paid to your wallet." |
+| **1. Scraped-and-abused data providers** | Niche datasets (real-estate feeds, logistics rates, patent/parts registries) being crawled for free | "Answer scrapers with 402 instead of 403 — turn bot traffic you already pay to serve into per-call revenue." (Seller-consented, on their own endpoints.) |
+| **2. Indie tool builders** | Solo devs with single-purpose utilities (OCR, extraction, conversion) | "Monetize in 5 minutes with zero billing infrastructure; agents that need you once can pay you once." |
+| **3. Agent agencies / integrators** | Teams building client workflows on LangChain/CrewAI etc. | "Stop juggling 20 API subscriptions per client — one wallet, pay per invocation, consolidated receipts." |
+
+Sequencing: five ICP-0 conversations first (existing network), then five
+ICP-1 (findable: whose robots.txt and WAF pages show scraper pain), then
+five across ICP-2/3 (developer communities, honest participation — no
+covert seeding per DISTRIBUTION.md).
 
 ## 2. The break-even equation
 

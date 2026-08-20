@@ -80,6 +80,12 @@ Product Hunt / HN Show / dev.to write-up / X thread — human-discovery for the
 Concierge-launch pipeline (SELFSUSTAIN.md §1b). Do after the estate is live so
 every link lands on working, verifiable endpoints. 🖱
 
+Asset on the shelf: a designed React/Vite "executive memo" site (brass/ink
+aesthetic, PLM-targeted — sections: WireTrace, Memo, Economics, Domains,
+Lifecycle, Pillars, Deploy) exists from an earlier design session. It can
+ship on Cloudflare Pages as the enterprise brief (e.g. brief.code402.dev)
+for ICP-0 outreach without touching the conversion-focused worker landing. 🖱
+
 ## Sequencing (ties to SELFSUSTAIN.md milestones)
 
 ```

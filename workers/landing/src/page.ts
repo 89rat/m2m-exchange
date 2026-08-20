@@ -141,7 +141,7 @@ export function landingHtml(): string {
   <div>
     <span class="eyebrow">HTTP/1.1 402 Payment Required</span>
     <h1>Turn any API into <em>agent revenue</em>.</h1>
-    <p class="sub">List your endpoint in 60 seconds. AI agents discover it, pay per call in USDC, and every payment settles directly to <b>your</b> wallet. We route, meter, and attest — we never hold your money.</p>
+    <p class="sub">Machine consumption, minus the machinery of buying. List your endpoint in 60 seconds — AI agents discover it, pay per call in USDC, and every payment settles directly to <b>your</b> wallet. We route, meter, and attest; we never hold your money.</p>
     <div class="ctas">
       <a class="btn primary" href="#sell">Start selling →</a>
       <a class="btn ghost" href="${ATLAS}">Browse the verified directory</a>
