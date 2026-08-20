@@ -163,6 +163,7 @@ export function landingHtml(): string {
 <div class="live" id="live">
   <div><b><span class="dot" id="gw-dot"></span><span id="gw-status">checking…</span></b><span>gateway</span></div>
   <div><b id="svc-count">—</b><span>services listed</span></div>
+  <div><b id="settled-count">—</b><span>settled payments</span></div>
   <div><b id="net">—</b><span>settlement network</span></div>
   <div><b style="color:var(--green)">0%</b><span>custody of your funds</span></div>
 </div>
@@ -285,6 +286,9 @@ curl ${GATEWAY}/v1/sellers/acme/invoice     # settled receipts × your tier's fe
   }).catch(function () { txt("gw-status", "unreachable"); });
   fetch(gw + "/v1/services").then(function (r) { return r.json(); }).then(function (s) {
     txt("svc-count", String((s.services || []).length));
+  }).catch(function () {});
+  fetch(gw + "/v1/stats").then(function (r) { return r.json(); }).then(function (s) {
+    if (typeof s.total_settled_calls === "number") txt("settled-count", s.total_settled_calls.toLocaleString());
   }).catch(function () {});
 })();
 </script>

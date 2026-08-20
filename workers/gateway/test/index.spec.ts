@@ -305,6 +305,34 @@ describe("m2m-gateway", () => {
     expect(bad.status).toBe(403);
   });
 
+  // ---- Platform stats: public flywheel telemetry (LOOPS.md T3) ----
+
+  it("GET /v1/stats aggregates receipts into public platform telemetry", async () => {
+    await SELF.fetch("http://example.com/v1/sellers", { method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ id: "statsco", wallet: "0x4444444444444444444444444444444444444444", name: "StatsCo" }) });
+    await env.REGISTRY.prepare(
+      `INSERT INTO receipts (ts, seller_id, service_id, amount_usd, payer) VALUES
+       (?1,'statsco','alpha','$0.10','0xpayer1'),(?1,'statsco','alpha','$0.10','0xpayer2'),(?1,'statsco','beta','$1.00','0xpayer1')`,
+    ).bind(Date.now()).run();
+
+    const res = await SELF.fetch("http://example.com/v1/stats");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("cache-control")).toContain("max-age=60");
+    const s = (await res.json()) as {
+      total_settled_calls: number; gross_usd: number; unique_payers: number;
+      last_30d: { settled_calls: number }; sellers: number;
+      top_services: { seller_id: string; service_id: string; calls: number; gross_usd: number }[];
+    };
+    expect(s.total_settled_calls).toBeGreaterThanOrEqual(3);
+    expect(s.unique_payers).toBeGreaterThanOrEqual(2);
+    expect(s.last_30d.settled_calls).toBeGreaterThanOrEqual(3);
+    expect(s.sellers).toBeGreaterThanOrEqual(1);
+    const alpha = s.top_services.find((t) => t.seller_id === "statsco" && t.service_id === "alpha");
+    expect(alpha).toBeDefined();
+    expect(alpha!.calls).toBe(2);
+    expect(alpha!.gross_usd).toBeCloseTo(0.2, 6);
+  });
+
   // ---- Config-driven pricing (LOOPS.md T2) ----
 
   it("PRICE_BASIC/PRICE_PREMIUM env overrides flow into 402 challenges and /v1/services", async () => {
