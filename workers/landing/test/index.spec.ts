@@ -11,6 +11,8 @@ describe("code402 landing worker", () => {
     expect(html).toContain("POST"); // onboarding snippet present
     expect(html).toContain("gateway.code402.dev/v1/sellers");
     expect(html).toContain("402 Payment Required"); // hero terminal
+    expect(html).toContain("Integer money only"); // engineering-standard section
+    expect(html).toContain("hello@code402.dev"); // enterprise contact
   });
 
   it("serves llms.txt for LLM crawlers", async () => {
