@@ -1,1 +1,0 @@
-This folder contains the built output assets for the worker "code402-landing" generated at 2026-08-20T22:23:59.106Z.
