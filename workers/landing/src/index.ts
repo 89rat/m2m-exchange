@@ -28,6 +28,31 @@ app.get("/.well-known/x402.json", (c) => {
   return c.json(x402Manifest());
 });
 
+// Agent card (A2A /.well-known/agent.json convention): one document that tells
+// any autonomous agent what this estate is, what it can do, and where to pay.
+app.get("/.well-known/agent.json", (c) => {
+  c.header("cache-control", CACHE);
+  return c.json({
+    name: "code402",
+    description:
+      "Open M2M/1 commerce layer on x402 (HTTP 402): machine-payable API catalog, probe-verified trust index, seller registration, settlement receipts. Non-custodial USDC on Base.",
+    url: "https://code402.dev",
+    provider: { organization: "JUANA LIMITED", url: "https://code402.dev" },
+    version: "1.0.0",
+    protocols: ["x402", "m2m/1", "mcp"],
+    capabilities: {
+      discovery: "https://atlas.code402.dev",
+      catalog: "https://gateway.code402.dev/v1/services",
+      registerSeller: "https://gateway.code402.dev/v1/sellers",
+      mcp: "https://mcp.code402.dev/mcp",
+      trust: "https://code402.dev/trust",
+      openapi: "https://gateway.code402.dev/openapi.json",
+    },
+    payment: { schemes: ["exact"], asset: "USDC", networks: ["base-sepolia", "base"] },
+    contact: "hello@code402.dev",
+  });
+});
+
 app.get("/robots.txt", (c) =>
   c.text(["User-agent: *", "Allow: /", "", "Sitemap: https://code402.dev/sitemap.xml"].join("\n")),
 );
