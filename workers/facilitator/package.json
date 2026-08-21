@@ -1,0 +1,22 @@
+{
+  "name": "@m2m/facilitator",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "hono": "^4.13.2",
+    "viem": "^2.55.17",
+    "x402": "^1.2.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250815.0",
+    "@types/node": "^24.0.0",
+    "vitest": "^4.1.10",
+    "wrangler": "^4.123.0"
+  }
+}

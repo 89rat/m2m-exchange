@@ -27,6 +27,9 @@ routes = [
 # JUANA LIMITED operating/receiving wallet (EIP-55 checksummed).
 [vars]
 SELLER_WALLET_ADDRESS = "0x417Da74CDc0D3BabF6AdC851b6E5c638574c0D58"
+# Self-hosted facilitator (workers/facilitator). Override wins over CDP/public
+# facilitators on both testnet and mainnet — the estate settles its own calls.
+FACILITATOR_URL = "https://facilitator.code402.dev"
 # Optional first-party price overrides (dollar strings; malformed values make
 # the worker fail closed). Defaults: basic $0.001, premium $0.005.
 # PRICE_BASIC = "$0.001"
