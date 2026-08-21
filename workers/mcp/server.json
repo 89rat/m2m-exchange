@@ -1,7 +1,7 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-09-29/server.schema.json",
   "name": "io.github.89rat/code402",
-  "description": "Discover machine-payable APIs on the code402/x402 gateway, probe x402 payment terms, and run seller operations (register, list, analytics, invoices). Non-custodial: no tool touches funds or keys.",
+  "description": "Discover machine-payable APIs, probe x402 payment terms, and run seller operations. Non-custodial.",
   "version": "1.0.0",
   "websiteUrl": "https://code402.dev",
   "repository": {
