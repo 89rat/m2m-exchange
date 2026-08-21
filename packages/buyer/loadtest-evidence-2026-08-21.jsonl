@@ -1,0 +1,10 @@
+{"i":0,"ts":"2026-08-21T00:06:20.264Z","endpoint":"/api/weather","unpaidStatus":402,"paidStatus":402,"latencyMs":2175,"error":"paid 402"}
+{"i":1,"ts":"2026-08-21T00:06:21.278Z","endpoint":"/api/echo","unpaidStatus":402,"paidStatus":402,"latencyMs":1165,"error":"paid 402"}
+{"i":2,"ts":"2026-08-21T00:06:22.440Z","endpoint":"/api/weather","unpaidStatus":402,"paidStatus":402,"latencyMs":739,"error":"paid 402"}
+{"i":3,"ts":"2026-08-21T00:06:23.446Z","endpoint":"/api/echo","unpaidStatus":402,"paidStatus":402,"latencyMs":724,"error":"paid 402"}
+{"i":4,"ts":"2026-08-21T00:06:24.452Z","endpoint":"/api/weather","unpaidStatus":402,"paidStatus":402,"latencyMs":619,"error":"paid 402"}
+{"i":5,"ts":"2026-08-21T00:06:25.454Z","endpoint":"/api/echo","unpaidStatus":402,"paidStatus":402,"latencyMs":768,"error":"paid 402"}
+{"i":6,"ts":"2026-08-21T00:06:26.444Z","endpoint":"/api/weather","unpaidStatus":402,"paidStatus":402,"latencyMs":683,"error":"paid 402"}
+{"i":7,"ts":"2026-08-21T00:06:27.449Z","endpoint":"/api/echo","unpaidStatus":402,"paidStatus":402,"latencyMs":668,"error":"paid 402"}
+{"i":8,"ts":"2026-08-21T00:06:28.451Z","endpoint":"/api/weather","unpaidStatus":402,"paidStatus":402,"latencyMs":650,"error":"paid 402"}
+{"i":9,"ts":"2026-08-21T00:06:29.454Z","endpoint":"/api/echo","unpaidStatus":402,"paidStatus":402,"latencyMs":572,"error":"paid 402"}

@@ -6,6 +6,7 @@ import type { ServiceDescriptor, ServiceList } from "@m2m/protocol";
 import { registryApp, dynamicServiceDescriptors, createSellerProxy, toUnits } from "./registry";
 import { prepaidApp, createPrepaidDebitMiddleware, creditAccount } from "./prepaid";
 import { resolveNetwork, resolveFacilitator, usdcAddress, type NetworkBindings } from "./network";
+import { x402v2Compat } from "./x402v2";
 
 /**
  * Environment bindings for the gateway worker.
@@ -184,7 +185,11 @@ export function createApp(env: Bindings) {
   app.get("/openapi.json", async (c) => {
     const { openApiSpec } = await import("./openapi");
     c.header("cache-control", "public, max-age=3600");
-    return c.json(openApiSpec("https://gateway.code402.dev"));
+    return c.json(openApiSpec("https://gateway.code402.dev", {
+      basicUsd: prices.basic,
+      premiumUsd: prices.premium,
+      contactEmail: "hello@code402.dev",
+    }));
   });
 
   // Self-manifest so x402-native crawlers (incl. Coinbase Bazaar) find us.
@@ -200,6 +205,21 @@ export function createApp(env: Bindings) {
       discovery_index: "https://atlas.code402.dev",
       directory: "https://atlas.code402.dev/directory.md",
       settlement_layer: "https://code402.dev",
+    }),
+  );
+
+  // x402scan compatibility fan-out: /.well-known/x402 (no suffix) lists every
+  // payable first-party resource so indexers can auto-register them.
+  app.get("/.well-known/x402", (c) =>
+    c.json({
+      version: 1,
+      resources: [
+        "https://gateway.code402.dev/api/weather",
+        "https://gateway.code402.dev/api/forecast",
+        "https://gateway.code402.dev/api/echo",
+        "https://gateway.code402.dev/api/x402-probe",
+        "https://gateway.code402.dev/api/vat-check",
+      ],
     }),
   );
 
@@ -272,6 +292,10 @@ export function createApp(env: Bindings) {
       creditAccount(env.REGISTRY, payer, BigInt(Math.round(usd * 1e6)).toString(), `topup:${txHash}`).catch(() => {}),
     );
   });
+
+  // v2 discovery compatibility: post-process the 402 challenge to expose v2
+  // fields (accepts[].amount atomic units + CAIP-2 networkId) additively.
+  app.use("/api/*", x402v2Compat());
 
   // Everything under /api/* is paywalled via the x402 payment middleware.
   app.use(

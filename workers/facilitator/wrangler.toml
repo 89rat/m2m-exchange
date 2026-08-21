@@ -18,8 +18,8 @@ routes = [
 [vars]
 # "base-sepolia" (default) or "base" (mainnet). Flip together with the gateway.
 NETWORK = "base-sepolia"
-# Optional RPC overrides (defaults: public Base endpoints).
-# RPC_URL = "https://sepolia.base.org"
+# RPC override: the bare public endpoint rate-limits Cloudflare egress IPs.
+RPC_URL = "https://base-sepolia-rpc.publicnode.com"
 
 [observability]
 enabled = true

@@ -155,6 +155,12 @@ describe("parseFacilitatorRequest", () => {
     expect(out.payload.scheme).toBe("exact");
   });
 
+  it("accepts the v2 wire shape (paymentPayload object, no base64)", () => {
+    const out = parseFacilitatorRequest({ paymentPayload: VALID_PAYLOAD, paymentRequirements: ESTATE_REQ });
+    expect(out.payload.scheme).toBe("exact");
+    expect(out.requirements.resource).toContain("code402.dev");
+  });
+
   it("rejects non-object bodies and missing fields", () => {
     expect(() => parseFacilitatorRequest(null)).toThrow();
     expect(() => parseFacilitatorRequest({ paymentRequirements: ESTATE_REQ })).toThrow();

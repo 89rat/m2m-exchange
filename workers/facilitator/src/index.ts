@@ -58,23 +58,29 @@ export function decodePaymentHeader(paymentHeader: string): PaymentPayload {
   return payload;
 }
 
-/** Validate the facilitator request body shape before touching the chain. */
+/**
+ * Validate the facilitator request body. Accepts both wire dialects:
+ *  - v2: { paymentPayload: {...}, paymentRequirements: {...} }  (object)
+ *  - v1: { paymentHeader: "<base64 json>", paymentRequirements: {...} }
+ */
 export function parseFacilitatorRequest(body: unknown): {
   payload: PaymentPayload;
   requirements: PaymentRequirements;
 } {
   if (!body || typeof body !== "object") throw new Error("body must be an object");
   const b = body as Record<string, unknown>;
-  if (typeof b.paymentHeader !== "string" || !b.paymentHeader) {
-    throw new Error("paymentHeader (base64) is required");
-  }
   if (!b.paymentRequirements || typeof b.paymentRequirements !== "object") {
     throw new Error("paymentRequirements is required");
   }
-  return {
-    payload: decodePaymentHeader(b.paymentHeader),
-    requirements: b.paymentRequirements as PaymentRequirements,
-  };
+  let payload: PaymentPayload;
+  if (b.paymentPayload && typeof b.paymentPayload === "object") {
+    payload = b.paymentPayload as PaymentPayload;
+  } else if (typeof b.paymentHeader === "string" && b.paymentHeader) {
+    payload = decodePaymentHeader(b.paymentHeader);
+  } else {
+    throw new Error("paymentPayload (object) or paymentHeader (base64) is required");
+  }
+  return { payload, requirements: b.paymentRequirements as PaymentRequirements };
 }
 
 const app = new Hono<{ Bindings: FacilitatorBindings }>();
@@ -174,14 +180,11 @@ app.post("/settle", async (c) => {
   const signer = createWalletClient({ account, chain, transport: http(rpcUrl) });
   const result = await settle(signer as never, parsed.payload, parsed.requirements);
 
-  // x402 settle → facilitator wire shape ({ success, txHash, networkId }).
-  const r = result as { success: boolean; transaction?: string; network?: string; errorReason?: string };
-  return c.json({
-    success: r.success,
-    txHash: r.transaction,
-    networkId: r.network ?? network,
-    ...(r.success ? {} : { error: r.errorReason ?? "settlement failed" }),
-  });
+  // Pass through the x402 SettleResponse verbatim — the wire schema is
+  // { success, errorReason?, payer?, transaction, network } (v2 facilitator).
+  const r = result as Record<string, unknown>;
+  if (r.network === undefined) r.network = network;
+  return c.json(r);
 });
 
 export default app;

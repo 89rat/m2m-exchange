@@ -359,9 +359,16 @@ describe("m2m-gateway", () => {
     const spec = (await res.json()) as { openapi: string; paths: Record<string, unknown>; info: { title: string } };
     expect(spec.openapi).toBe("3.1.0");
     expect(spec.info.title).toBe("code402 gateway");
-    for (const p of ["/v1/services", "/v1/stats", "/v1/sellers", "/api/weather", "/s/{sellerId}/{serviceId}"]) {
+    for (const p of ["/v1/services", "/v1/stats", "/v1/sellers", "/api/weather"]) {
       expect(spec.paths[p]).toBeDefined();
     }
+    // Templated marketplace path is deliberately absent from the discovery doc
+    // (unresolvable on a bare probe); concrete listings surface via /v1/services.
+    expect(spec.paths["/s/{sellerId}/{serviceId}"]).toBeUndefined();
+    // x402scan contract: paid ops carry x-payment-info with protocol + pricing.
+    const weather = spec.paths["/api/weather"] as { get: { "x-payment-info"?: { protocols: unknown[]; price: { mode: string } } } };
+    expect(weather.get["x-payment-info"]?.price.mode).toBe("fixed");
+    expect(weather.get["x-payment-info"]?.protocols).toBeDefined();
   });
 
   // ---- Platform stats: public flywheel telemetry (LOOPS.md T3) ----
