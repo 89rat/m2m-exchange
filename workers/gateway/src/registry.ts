@@ -28,10 +28,14 @@ async function ensureSchema(db: D1Database): Promise<void> {
   if (schemaReady) return;
   await db.batch([
     db.prepare(`CREATE TABLE IF NOT EXISTS sellers (id TEXT PRIMARY KEY, wallet TEXT NOT NULL UNIQUE, name TEXT NOT NULL, created_at INTEGER NOT NULL, tier TEXT NOT NULL DEFAULT 'free', promoted INTEGER NOT NULL DEFAULT 0, verified INTEGER NOT NULL DEFAULT 0, verify_nonce TEXT)`),
-    db.prepare(`CREATE TABLE IF NOT EXISTS listings (id INTEGER PRIMARY KEY AUTOINCREMENT, seller_id TEXT NOT NULL REFERENCES sellers(id) ON DELETE CASCADE, service_id TEXT NOT NULL, method TEXT NOT NULL DEFAULT 'GET', upstream_url TEXT NOT NULL, price_usd TEXT NOT NULL, description TEXT DEFAULT '', live INTEGER NOT NULL DEFAULT 1, created_at INTEGER NOT NULL, promoted INTEGER NOT NULL DEFAULT 0, UNIQUE(seller_id, service_id))`),
+    db.prepare(`CREATE TABLE IF NOT EXISTS listings (id INTEGER PRIMARY KEY AUTOINCREMENT, seller_id TEXT NOT NULL REFERENCES sellers(id) ON DELETE CASCADE, service_id TEXT NOT NULL, method TEXT NOT NULL DEFAULT 'GET', upstream_url TEXT NOT NULL, fallback_url TEXT, price_usd TEXT NOT NULL, description TEXT DEFAULT '', live INTEGER NOT NULL DEFAULT 1, created_at INTEGER NOT NULL, promoted INTEGER NOT NULL DEFAULT 0, UNIQUE(seller_id, service_id))`),
     db.prepare(`CREATE TABLE IF NOT EXISTS receipts (id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, seller_id TEXT NOT NULL REFERENCES sellers(id), service_id TEXT NOT NULL, amount_usd TEXT NOT NULL, payer TEXT, tx_hash TEXT, raw_response TEXT)`),
     db.prepare(`CREATE INDEX IF NOT EXISTS idx_receipts_seller ON receipts(seller_id, ts DESC)`),
   ]);
+  // Additive schema evolution for pre-existing tables (idempotent).
+  try {
+    await db.prepare(`ALTER TABLE listings ADD COLUMN fallback_url TEXT`).run();
+  } catch { /* column already exists */ }
   schemaReady = true;
 }
 
@@ -309,21 +313,23 @@ export function registryApp(env: RegistryBindings): Hono<{ Bindings: RegistryBin
   app.post("/v1/sellers/:sellerId/services", async (c) => {
     const sellerId = c.req.param("sellerId");
     const body = (await c.req.json<Record<string, unknown>>().catch(() => ({}))) as {
-      serviceId?: string; method?: string; upstream_url?: string; price_usd?: string; description?: string;
+      serviceId?: string; method?: string; upstream_url?: string; fallback_url?: string; price_usd?: string; description?: string;
     };
     const serviceId = String(body.serviceId ?? "").toLowerCase();
     if (!slugOk(serviceId)) return c.json({ error: "serviceId must be [a-z0-9-]{2,63}" }, 400);
     if (!body.upstream_url || !upstreamAllowed(body.upstream_url)) return c.json({ error: "upstream_url rejected: must be https to a public target" }, 400);
+    if (body.fallback_url && !upstreamAllowed(body.fallback_url)) return c.json({ error: "fallback_url rejected: must be https to a public target" }, 400);
     if (!body.price_usd || !priceOk(body.price_usd)) return c.json({ error: "price_usd like $0.05 required" }, 400);
 
     const seller = await env.REGISTRY.prepare(`SELECT id FROM sellers WHERE id = ?1`).bind(sellerId).first();
     if (!seller) return c.json({ m2mVersion: M2M_VERSION, error: { code: "SERVICE_NOT_FOUND", message: "unknown seller", retryable: false } }, 404);
 
     await env.REGISTRY.prepare(
-      `INSERT INTO listings (seller_id, service_id, method, upstream_url, price_usd, description, created_at)
-       VALUES (?1,?2,?3,?4,?5,?6,?7)
-       ON CONFLICT(seller_id, service_id) DO UPDATE SET upstream_url = ?4, price_usd = ?5, description = ?6, live = 1`,
+      `INSERT INTO listings (seller_id, service_id, method, upstream_url, fallback_url, price_usd, description, created_at)
+       VALUES (?1,?2,?3,?4,?5,?6,?7,?8)
+       ON CONFLICT(seller_id, service_id) DO UPDATE SET upstream_url = ?4, fallback_url = ?5, price_usd = ?6, description = ?7, live = 1`,
     ).bind(sellerId, serviceId, String(body.method ?? "GET").toUpperCase(), body.upstream_url,
+      body.fallback_url ?? null,
       body.price_usd.startsWith("$") ? body.price_usd : `$${body.price_usd}`,
       String(body.description ?? "").slice(0, 300), Date.now()).run();
 
@@ -379,7 +385,7 @@ export function createSellerProxy(env: RegistryBindings) {
       `SELECT l.*, s.wallet FROM listings l JOIN sellers s ON s.id = l.seller_id
        WHERE l.seller_id = ?1 AND l.service_id = ?2 AND l.live = 1`,
     ).bind(sellerId, serviceId).first<{
-      wallet: string; upstream_url: string; price_usd: string; method: string;
+      wallet: string; upstream_url: string; fallback_url: string | null; price_usd: string; method: string;
     }>();
     if (!listing) {
       return c.json({ m2mVersion: M2M_VERSION, error: { code: "SERVICE_NOT_FOUND", message: "unknown listing", retryable: false } }, 404);
@@ -429,17 +435,36 @@ export function createSellerProxy(env: RegistryBindings) {
         } catch { /* attestation is additive — never block a settled call on it */ }
       }
 
-      // Proxy to the seller's upstream.
+      // Proxy to the seller's upstream — primary first, fallback on network
+      // failure or 5xx (a paid call deserves a second target before it 502s).
+      // The request body is read once and reused across attempts.
+      const bodyText = ["GET", "HEAD"].includes(c2.req.method) ? undefined : await c2.req.text();
       let upstream: Response;
-      try {
-        upstream = await fetch(listing.upstream_url, {
+      const attempt = (target: string) =>
+        fetch(target, {
           method: c2.req.method,
           headers: upstreamHeaders,
-          body: ["GET", "HEAD"].includes(c2.req.method) ? undefined : await c2.req.text(),
+          body: bodyText,
           signal: AbortSignal.timeout(15_000),
         });
+      let usedFallback = false;
+      try {
+        upstream = await attempt(listing.upstream_url);
+        if (upstream.status >= 500 && listing.fallback_url && upstreamAllowed(listing.fallback_url)) {
+          usedFallback = true;
+          upstream = await attempt(listing.fallback_url);
+        }
       } catch (e) {
-        return c2.json({ m2mVersion: M2M_VERSION, error: { code: "INTERNAL", message: "upstream fetch failed", retryable: true } }, 502);
+        if (listing.fallback_url && upstreamAllowed(listing.fallback_url)) {
+          usedFallback = true;
+          try {
+            upstream = await attempt(listing.fallback_url);
+          } catch (e2) {
+            return c2.json({ m2mVersion: M2M_VERSION, error: { code: "INTERNAL", message: "upstream fetch failed (primary + fallback)", retryable: true } }, 502);
+          }
+        } else {
+          return c2.json({ m2mVersion: M2M_VERSION, error: { code: "INTERNAL", message: "upstream fetch failed", retryable: true } }, 502);
+        }
       }
       // Receipt row = invoice basis (0.099% take-rate) + reputation seed.
       await env.REGISTRY.prepare(

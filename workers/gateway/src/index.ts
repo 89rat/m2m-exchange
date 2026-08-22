@@ -172,7 +172,24 @@ export function createApp(env: Bindings) {
   // M2M/1 §6.1 discovery: machine-readable storefront (free).
   app.get("/v1/services", async (c) => {
     const dynamic = await dynamicServiceDescriptors(env).catch(() => []);
-    const body: ServiceList = { m2mVersion: M2M_VERSION, services: [...serviceDescriptors(env), ...dynamic] };
+    const services = [...serviceDescriptors(env), ...dynamic];
+
+    // Content-negotiated compact catalog: agents that ask for the AST form get
+    // one terse line per service (id|method|units|path) instead of full JSON —
+    // ~90% fewer prompt tokens on every discovery loop. The agent that reads
+    // cheaper is the agent that buys here.
+    if ((c.req.header("accept") ?? "").includes("application/x-ast-compressed")) {
+      const lines = services.map((s) => {
+        const units = s.pricing.mode === "static" ? s.pricing.price.amount : "quoted";
+        return `${s.serviceId}|${s.method}|${units}|${s.endpoint}`;
+      });
+      return c.text(lines.join("\n"), 200, {
+        "content-type": "application/x-ast-compressed",
+        "x-catalog-format": "serviceId|method|usdcAtomicUnits|path",
+      });
+    }
+
+    const body: ServiceList = { m2mVersion: M2M_VERSION, services };
     return c.json(body);
   });
 
