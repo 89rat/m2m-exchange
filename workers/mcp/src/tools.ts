@@ -11,6 +11,8 @@ import { z } from "zod";
 import {
   CHARACTER_LIMIT,
   GatewayError,
+  atlasUrl,
+  fetchJson,
   gatewayFetch,
   probeTargetAllowed,
   truncateText,
@@ -88,10 +90,13 @@ export function buildServer(env: McpBindings): McpServer {
         query: z.string().max(200).optional().describe("Case-insensitive substring filter on serviceId, name, and description"),
         limit: z.number().int().min(1).max(100).optional().describe("Maximum services to return (default 20)"),
         offset: z.number().int().min(0).optional().describe("Services to skip (pagination, default 0)"),
+        compact: z.boolean().optional().describe(
+          "Token-saving mode: returns one terse line per service (serviceId | price | method | url) instead of full objects. Use for large catalogs.",
+        ),
       },
       annotations: readOnly,
     },
-    async ({ query, limit: rawLimit, offset: rawOffset }) =>
+    async ({ query, limit: rawLimit, offset: rawOffset, compact }) =>
       run(async () => {
         const limit = rawLimit ?? 20;
         const offset = rawOffset ?? 0;
@@ -104,6 +109,23 @@ export function buildServer(env: McpBindings): McpServer {
           : list.services;
         const page = filtered.slice(offset, offset + limit);
         const hasMore = filtered.length > offset + page.length;
+        if (compact) {
+          const lines = page.map(
+            (s) =>
+              `${s.serviceId} | ${unitsToDollars(s.pricing.price.amount)} | ${s.method} | ${env.GATEWAY_URL.replace(/\/$/, "")}${s.endpoint}`,
+          );
+          return ok(
+            {
+              total: filtered.length,
+              count: page.length,
+              offset,
+              has_more: hasMore,
+              ...(hasMore ? { next_offset: offset + page.length } : {}),
+              services_compact: lines,
+            },
+            lines.join("\n"),
+          );
+        }
         return ok({
           total: filtered.length,
           count: page.length,
@@ -189,11 +211,14 @@ export function buildServer(env: McpBindings): McpServer {
             const j = (await res.json()) as { accepts?: Array<Record<string, string>> };
             const a = j.accepts?.[0];
             if (a) {
+              // v2 challenges carry `amount` + CAIP-2 `networkId`; v1 carries
+              // `maxAmountRequired` + short `network`. Read both.
+              const units = a.amount ?? a.maxAmountRequired ?? null;
               terms = {
                 scheme: a.scheme ?? null,
-                network: a.network ?? null,
-                amount: a.maxAmountRequired ?? null,
-                price: a.maxAmountRequired ? unitsToDollars(a.maxAmountRequired) : null,
+                network: a.networkId ?? a.network ?? null,
+                amount: units,
+                price: units ? unitsToDollars(units) : null,
                 payTo: a.payTo ?? null,
                 asset: a.asset ?? null,
               };
@@ -235,7 +260,7 @@ export function buildServer(env: McpBindings): McpServer {
       title: "Register a seller",
       description:
         "Register a seller on the code402 gateway (or update its name — the payout wallet is immutable once set; re-binding requires EIP-191 proof): POST /v1/sellers with { id, wallet, name }. Payments for the seller's listings settle " +
-        "directly to this wallet (non-custodial). Registration is free; the platform invoices a take-rate on settled receipts (Free tier 2%, Pro 1.5%). " +
+        "directly to this wallet (non-custodial). Registration is free; fees are 0.099% of settled volume, invoiced monthly against receipts (accrued until $9). Pro is $9/mo at 0% take. " +
         "Returns { sellerId, wallet, storefront }. Prove wallet ownership later via the gateway's EIP-191 verify-challenge flow.",
       inputSchema: {
         id: z.string().regex(/^[a-z0-9][a-z0-9-]{1,62}$/, "lowercase slug, 2-63 chars").describe("Seller slug, e.g. 'acme'"),
@@ -317,6 +342,71 @@ export function buildServer(env: McpBindings): McpServer {
     async ({ sellerId, since }) =>
       run(async () => {
         const r = await gatewayFetch<Record<string, unknown>>(env, `/v1/sellers/${sellerId}/invoice?since=${since ?? 0}`);
+        return ok(r);
+      }),
+  );
+
+  server.registerTool(
+    "code402_trust_check",
+    {
+      title: "Trust-check an endpoint or domain",
+      description:
+        "Query the code402 Atlas index for measured trust evidence on an endpoint or domain: probe-verified liveness (probedAlive), " +
+        "evidence tier (probe vs asserted), and ready-to-pay settlement terms (payTo, asset, CAIP-2 network, integer USDC amountUnits) when measured. " +
+        "Use before letting an agent pay any endpoint. Verified evidence is measured by probes, never self-reported. " +
+        "Returns { count, results: [{ title, url, probedAlive, evidence, settlement? }] }.",
+      inputSchema: {
+        q: z.string().min(2).max(200).describe("Search query — domain, URL, or service name, e.g. 'weather' or 'api.acme.com'"),
+        limit: z.number().int().min(1).max(25).optional().describe("Max results (default 10)"),
+      },
+      annotations: readOnly,
+    },
+    async ({ q, limit }) =>
+      run(async () => {
+        const r = await fetchJson<{
+          count?: number;
+          results?: Array<Record<string, unknown>>;
+        }>(atlasUrl(env), `/v1/search?q=${encodeURIComponent(q)}`);
+        const results = (r.results ?? []).slice(0, limit ?? 10).map((row) => ({
+          title: row.title ?? null,
+          url: row.url ?? row.canonical_url ?? null,
+          probedAlive: row.probedAlive ?? null,
+          alive: row.alive ?? null,
+          evidence: row.evidence ?? null,
+          settlement: row.settlement ?? null,
+        }));
+        return ok(
+          { count: r.count ?? results.length, results },
+          results.length
+            ? results
+                .map(
+                  (x) =>
+                    `${x.title ?? x.url} | probedAlive=${x.probedAlive} | evidence=${x.evidence}` +
+                    (x.settlement ? " | payable" : ""),
+                )
+                .join("\n")
+            : `No measured trust evidence for '${q}'. Unrated is the honest default — the endpoint may be unindexed.`,
+        );
+      }),
+  );
+
+  server.registerTool(
+    "code402_get_agent_reputation",
+    {
+      title: "Get an agent's signed reputation credential",
+      description:
+        "Fetch an agent's tamper-evident reputation credential from the code402 Atlas rail: GET /v1/agent/{agent_id}/reputation. " +
+        "The credential is an HMAC-signed, expiring (10-minute TTL) bundle over a hash-chained outcome ledger — settled_ok, settled_fail, " +
+        "distinct_hosts, volume_units, reputation_score — verifiable without any shared secret via POST /v1/reputation/verify. " +
+        "Sellers use this to price counterparty risk before serving a new agent.",
+      inputSchema: {
+        agent_id: z.string().regex(/^agt_[0-9a-f]{12}$/, "Atlas agent id like agt_7a38c712318b").describe("Atlas agent id"),
+      },
+      annotations: readOnly,
+    },
+    async ({ agent_id }) =>
+      run(async () => {
+        const r = await fetchJson<Record<string, unknown>>(atlasUrl(env), `/v1/agent/${agent_id}/reputation`);
         return ok(r);
       }),
   );

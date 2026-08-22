@@ -95,18 +95,20 @@ describe("code402 MCP server", () => {
     expect(info.name).toBe("code402-mcp-server");
   });
 
-  it("lists the 8 code402 tools", async () => {
+  it("lists the 10 code402 tools", async () => {
     const r = await rpc("tools/list");
     const tools = (r.result?.tools as Array<{ name: string }>).map((t) => t.name).sort();
     expect(tools).toEqual([
       "code402_create_listing",
       "code402_gateway_health",
+      "code402_get_agent_reputation",
       "code402_get_seller_analytics",
       "code402_get_seller_invoice",
       "code402_get_service",
       "code402_list_services",
       "code402_probe_endpoint",
       "code402_register_seller",
+      "code402_trust_check",
     ]);
   });
 

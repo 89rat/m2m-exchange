@@ -6,6 +6,43 @@
 
 export interface McpBindings {
   GATEWAY_URL: string;
+  /** Atlas discovery index origin (trust evidence + reputation rail). */
+  ATLAS_URL?: string;
+}
+
+const DEFAULT_ATLAS_URL = "https://atlas.code402.dev";
+
+export function atlasUrl(env: McpBindings): string {
+  return (env.ATLAS_URL ?? DEFAULT_ATLAS_URL).replace(/\/$/, "");
+}
+
+/** Fetch JSON from an absolute base URL with timeout + actionable errors. */
+export async function fetchJson<T>(
+  base: string,
+  path: string,
+  init?: RequestInit,
+): Promise<T> {
+  let res: Response;
+  try {
+    res = await fetch(`${base}${path}`, {
+      ...init,
+      headers: { "content-type": "application/json", ...(init?.headers ?? {}) },
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    });
+  } catch (e) {
+    throw new GatewayError(
+      `service unreachable at ${base}${path}: ${e instanceof Error ? e.message : "fetch failed"}.`,
+    );
+  }
+  const body = await res.text();
+  if (!res.ok) {
+    throw new GatewayError(errorHint(res.status, path, body), res.status);
+  }
+  try {
+    return JSON.parse(body) as T;
+  } catch {
+    throw new GatewayError(`non-JSON response from ${base}${path}`);
+  }
 }
 
 const FETCH_TIMEOUT_MS = 15_000;
@@ -28,27 +65,14 @@ export async function gatewayFetch<T>(
   init?: RequestInit,
 ): Promise<T> {
   const base = env.GATEWAY_URL.replace(/\/$/, "");
-  let res: Response;
   try {
-    res = await fetch(`${base}${path}`, {
-      ...init,
-      headers: { "content-type": "application/json", ...(init?.headers ?? {}) },
-      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-    });
+    return await fetchJson<T>(base, path, init);
   } catch (e) {
-    throw new GatewayError(
-      `gateway unreachable at ${base}${path}: ${e instanceof Error ? e.message : "fetch failed"}. ` +
-        `Check code402_gateway_health first.`,
-    );
-  }
-  const body = await res.text();
-  if (!res.ok) {
-    throw new GatewayError(errorHint(res.status, path, body), res.status);
-  }
-  try {
-    return JSON.parse(body) as T;
-  } catch {
-    throw new GatewayError(`gateway returned non-JSON from ${path}`);
+    if (e instanceof GatewayError && e.message.startsWith("service unreachable")) {
+      throw new GatewayError(e.message.replace("service unreachable", "gateway unreachable") +
+        " Check code402_gateway_health first.");
+    }
+    throw e;
   }
 }
 
