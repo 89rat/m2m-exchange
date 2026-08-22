@@ -205,6 +205,15 @@ export function createApp(env: Bindings) {
       discovery_index: "https://atlas.code402.dev",
       directory: "https://atlas.code402.dev/directory.md",
       settlement_layer: "https://code402.dev",
+      attestation: {
+        header: "X-Code402-Attestation",
+        algorithm: "Ed25519",
+        public_key_x: "E8qkNazBt2VA28opkiVkmR80YTGy4-PH3YjuRB12-xA",
+        canonical: "sellerId|serviceId|payer|amountUnits|nonce|issuedAtMs|expiresAtMs",
+        wire: "base64url(canonical) + \".\" + base64url(signature)",
+        ttl_seconds: 60,
+        note: "Every paid call we proxy to a seller upstream carries this signed proof. Verify with the public key; an upstream enforcing it cannot be bypassed direct.",
+      },
     }),
   );
 

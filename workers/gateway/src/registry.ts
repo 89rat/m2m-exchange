@@ -15,6 +15,9 @@ import { resolveNetwork, resolveFacilitator, usdcAddress, type NetworkBindings }
 export interface RegistryBindings extends NetworkBindings {
   REGISTRY: D1Database;
   SELLER_WALLET_ADDRESS: string;
+  /** Ed25519 private key (JWK JSON) for upstream origin attestation. Optional:
+   *  when unset, proxied calls simply carry no attestation header. */
+  ATTEST_PRIVATE_JWK?: string;
 }
 
 /** Idempotent schema (mirrors migrations/0001_registry.sql) — safe to call on
@@ -394,19 +397,8 @@ export function createSellerProxy(env: RegistryBindings) {
       resolveFacilitator(env),
     ));
     sub.all("*", async (c2: any) => {
-      // Payment settled (middleware passed) — proxy to the seller's upstream.
-      let upstream: Response;
-      try {
-        upstream = await fetch(listing.upstream_url, {
-          method: c2.req.method,
-          headers: { "content-type": c2.req.header("content-type") ?? "application/json" },
-          body: ["GET", "HEAD"].includes(c2.req.method) ? undefined : await c2.req.text(),
-          signal: AbortSignal.timeout(15_000),
-        });
-      } catch (e) {
-        return c2.json({ m2mVersion: M2M_VERSION, error: { code: "INTERNAL", message: "upstream fetch failed", retryable: true } }, 502);
-      }
-      // Receipt row = invoice basis (2% take-rate) + reputation seed.
+      // Payment settled (middleware passed). Parse the receipt FIRST so the
+      // upstream call can carry proof of it.
       const payResp = c2.req.header("x-payment-response");
       let payer: string | null = null;
       let txHash: string | null = null;
@@ -415,7 +407,41 @@ export function createSellerProxy(env: RegistryBindings) {
         payer = pr?.payer ?? null;
         txHash = pr?.transaction ?? pr?.txHash ?? null;
       } catch { /* receipt fields stay null; settle still verified by middleware */ }
-      // DURABILITY RULE (pre-release audit §7): awaited, never dropped.
+
+      // Origin attestation: an Ed25519-signed, 60s, nonce-bound proof that this
+      // call arrived through code402 with a settled payment. Sellers verify with
+      // the public key published at /.well-known/x402.json — no shared secret.
+      // Anti-bypass: an upstream enforcing this header cannot be called direct.
+      const upstreamHeaders: Record<string, string> = {
+        "content-type": c2.req.header("content-type") ?? "application/json",
+      };
+      if (env.ATTEST_PRIVATE_JWK) {
+        try {
+          const { signAttestation } = await import("./attest");
+          const nonce = (txHash ?? crypto.randomUUID()).slice(0, 80);
+          const att = await signAttestation(env.ATTEST_PRIVATE_JWK, {
+            sellerId,
+            serviceId,
+            payer: payer ?? "unknown",
+            amountUnits: toUnits(price),
+          }, nonce);
+          upstreamHeaders["x-code402-attestation"] = att.header;
+        } catch { /* attestation is additive — never block a settled call on it */ }
+      }
+
+      // Proxy to the seller's upstream.
+      let upstream: Response;
+      try {
+        upstream = await fetch(listing.upstream_url, {
+          method: c2.req.method,
+          headers: upstreamHeaders,
+          body: ["GET", "HEAD"].includes(c2.req.method) ? undefined : await c2.req.text(),
+          signal: AbortSignal.timeout(15_000),
+        });
+      } catch (e) {
+        return c2.json({ m2mVersion: M2M_VERSION, error: { code: "INTERNAL", message: "upstream fetch failed", retryable: true } }, 502);
+      }
+      // Receipt row = invoice basis (0.099% take-rate) + reputation seed.
       await env.REGISTRY.prepare(
         `INSERT INTO receipts (ts, seller_id, service_id, amount_usd, payer, tx_hash, raw_response) VALUES (?1,?2,?3,?4,?5,?6,?7)`,
       ).bind(Date.now(), sellerId, serviceId, price, payer, txHash, payResp ?? null).run();
