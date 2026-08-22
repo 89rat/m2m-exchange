@@ -72,8 +72,12 @@ app.get("/sitemap.xml", (c) => {
 // (code402-edge-prod) via its workers.dev subdomain, so existing badge links,
 // citations, and the daily-updated trust record never 404. Port these natively
 // once the trust surface is rebuilt on the new stack.
-const LEGACY = "https://code402-edge-prod.akrivis.workers.dev";
-const LEGACY_PATHS = ["/trust", "/docs", "/pricing", "/x402.json"];
+const LEGACY = "https://code402-edge.akrivis.workers.dev";
+const LEGACY_PATHS = ["/trust", "/docs", "/x402.json"];
+
+// /pricing is NOT proxied: the legacy storefront shows the pre-launch price
+// card. The new landing's #pricing section (locked pricing) is authoritative.
+app.get("/pricing", (c) => c.redirect("/#pricing", 301));
 
 for (const p of LEGACY_PATHS) {
   const proxy = (c: any) => {
